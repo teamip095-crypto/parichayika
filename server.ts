@@ -20,6 +20,34 @@ import { transliterateText } from "./server/transliteration";
 // Load environment variables
 dotenv.config();
 
+// ============================================================================
+// MONEY INTEGRITY HELPER — guarantees finite Number for any monetary value
+// PostgreSQL pg driver returns NUMERIC(10,2) columns as strings ("500.00").
+// Without coercion, "500.00" + "500.00" becomes string concatenation
+// "500.00500.00" — exactly the bug the user reported.
+// ============================================================================
+function toMoney(value: any): number {
+  if (value === null || value === undefined || value === "") return 0;
+  // Strip currency symbols, thousand separators, whitespace
+  const cleaned = String(value)
+    .replace(/[₹$€£,\s]/g, "")
+    .replace(/[^0-9.\-]/g, "");
+  const n = Number(cleaned);
+  if (!isFinite(n) || isNaN(n)) return 0;
+  // Round to 2 decimals to prevent floating point drift
+  return Math.round(n * 100) / 100;
+}
+
+// Coerce to a guaranteed-numeric string for SQL parameter binding
+function toMoneyStr(value: any): string {
+  return toMoney(value).toFixed(2);
+}
+
+// Format INR amount for display: 500 -> "₹500.00"
+function formatINR(value: any): string {
+  return "₹" + toMoney(value).toFixed(2);
+}
+
 const app = express();
 const PORT = 3000;
 
@@ -800,7 +828,7 @@ app.post("/api/advertisements/save", async (req: any, res: any) => {
         edition_hi,
         size_code: sizeCode || (typeCode === "matrimony" ? "matrimony_standard" : "business_size"),
         size_hi,
-        price: Number(price),
+        price: toMoney(price),
         adType: typeCode
       };
 
@@ -818,13 +846,12 @@ app.post("/api/advertisements/save", async (req: any, res: any) => {
 
       if (cartItemId) {
         await dbRun(
-          "UPDATE cart_items SET ad_type = ?, data_json = ?, price = ? WHERE id = ?",
-          [typeCode, JSON.stringify(cartItemData), Number(price), cartItemId]
+          "UPDATE cart_items SET ad_type = ?, data_json = ?, price = ? WHERE id = ?", [typeCode, JSON.stringify(cartItemData), toMoney(price), cartItemId]
         );
       } else {
         const cartResult = await dbRun(
           "INSERT INTO cart_items (session_id, ad_type, data_json, price, created_at) VALUES (?, ?, ?, ?, ?)",
-          [sessionId, typeCode, JSON.stringify(cartItemData), Number(price), created_at]
+          [sessionId, typeCode, JSON.stringify(cartItemData), toMoney(price), created_at]
         );
         cartItemId = cartResult.lastID;
       }
@@ -984,7 +1011,7 @@ app.get("/api/cart", async (req: any, res: any) => {
       sessionId: item.session_id,
       adType: item.ad_type,
       data: JSON.parse(item.data_json),
-      price: item.price
+      price: toMoney(item.price)
     })));
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -1083,7 +1110,7 @@ app.post("/api/cart/add-matrimony", async (req: any, res: any) => {
         );
       }
 
-      const verifiedPrice = pricing && pricing.price > 0 ? Number(pricing.price) : 500;
+      const verifiedPrice = pricing && toMoney(pricing.price) > 0 ? toMoney(pricing.price) : 500;
 
       // Auto-generate or preserve unique ad number for this publication
       let adNumber = "";
@@ -1183,7 +1210,7 @@ app.post("/api/cart/add-business", async (req: any, res: any) => {
         });
       }
 
-      const verifiedPrice = Number(pricing.price);
+      const verifiedPrice = toMoney(pricing.price);
 
       // Auto-generate Ad Number for this item
       const countRow = await dbGet("SELECT COUNT(*) as count FROM advertisements WHERE type_code = 'business'");
@@ -1236,7 +1263,10 @@ app.delete("/api/cart/remove/:id", async (req: any, res: any) => {
 });
 
 app.post("/api/cart/clear", async (req: any, res: any) => {
-  const { sessionId } = req.body;
+  const sessionId = (req.body?.sessionId || req.query?.sessionId || "").toString().trim();
+  if (!sessionId) {
+    return res.status(400).json({ error: "sessionId is required" });
+  }
   try {
     await dbRun("DELETE FROM cart_items WHERE session_id = ?", [sessionId]);
     res.json({ success: true });
@@ -1268,7 +1298,7 @@ app.post("/api/order/submit", async (req: any, res: any) => {
     let total = 0;
     const itemsWithParsedData = cartItems.map((item) => {
       const parsedData = JSON.parse(item.data_json);
-      total += item.price;
+      total += toMoney(item.price);
       return { ...item, parsedData };
     });
 
@@ -1278,7 +1308,7 @@ app.post("/api/order/submit", async (req: any, res: any) => {
     // 3. Create main order record
     await dbRun(
       "INSERT INTO orders (order_id, total_amount, payment_status, created_at) VALUES (?, ?, 'PENDING', ?)",
-      [orderId, total, created_at]
+      [orderId, toMoney(total), created_at]
     );
 
     // 4. Save order items mapping & persistent advertisement records
@@ -1303,7 +1333,7 @@ app.post("/api/order/submit", async (req: any, res: any) => {
           parsed.magazine_hi || "परिचायिका",
           parsed.edition_hi || "संस्करण 2026",
           parsed.size_hi || (item.ad_type === "matrimony" ? "विवाह मानक (3.5 × 2 इंच)" : "व्यवसाय आकार"),
-          item.price,
+          toMoney(item.price),
           customerName,
           customerMobile,
           uploadedJpg,
@@ -1333,7 +1363,7 @@ app.post("/api/order/submit", async (req: any, res: any) => {
               uploaded_jpg_url = ?, design_link = ?
             WHERE id = ?
           `, [
-            customerName, customerMobile, item.price,
+            customerName, customerMobile, toMoney(item.price),
             parsed.district_hi || "रायपुर", parsed.sangathan_hi || "रायपुर साहू संगठन",
             parsed.magazine_hi || "परिचायिका", parsed.edition_hi || "संस्करण 2026",
             parsed.size_code || (item.ad_type === "matrimony" ? "matrimony_standard" : "business_full"),
@@ -1352,7 +1382,7 @@ app.post("/api/order/submit", async (req: any, res: any) => {
             parsed.magazine_hi || "परिचायिका", parsed.edition_hi || "संस्करण 2026",
             parsed.size_code || "business_full",
             parsed.size_hi || "पूरा पृष्ठ (7.2 × 9.6 इंच)",
-            customerName, customerMobile, item.price,
+            customerName, customerMobile, toMoney(item.price),
             uploadedJpg, designLink, created_at
           ]);
           adDbId = adRes.lastID;
@@ -1427,7 +1457,7 @@ app.post("/api/order/submit", async (req: any, res: any) => {
     // Retrieve UPI details with NPCI-compliant parameters
     const primaryUpiId = "9301056006@ybl";
     const cleanPayeeName = "IndianPress";
-    const formattedAmount = total.toFixed(2);
+    const formattedAmount = toMoney(total).toFixed(2);
     const cleanTxnRef = `ORD${orderId.replace(/[^a-zA-Z0-9]/g, "")}`;
     const cleanTxnNote = `Parichayika_${orderId}`;
 
@@ -2233,7 +2263,7 @@ app.post("/api/admin/masters/:entity", authenticateAdmin, async (req: any, res: 
     } else if (entity === "pricings") {
       await dbRun(
         "INSERT INTO pricings (district_id, sangathan_id, magazine_id, edition_id, adv_type_code, adv_size_code, price) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        [data.district_id, data.sangathan_id, data.magazine_id, data.edition_id, data.adv_type_code, data.adv_size_code, Number(data.price)]
+        [data.district_id, data.sangathan_id, data.magazine_id, data.edition_id, data.adv_type_code, data.adv_size_code, toMoney(data.price)]
       );
     } else if (entity === "publications") {
       await dbRun(
@@ -2264,7 +2294,7 @@ app.put("/api/admin/masters/:entity/:id", authenticateAdmin, async (req: any, re
     } else if (entity === "publications") {
       await dbRun("UPDATE publications SET district_id = ?, sangathan_id = ?, magazine_id = ?, edition_id = ?, is_enabled = ? WHERE id = ?", [data.district_id, data.sangathan_id, data.magazine_id, data.edition_id, data.is_enabled !== undefined ? (data.is_enabled ? 1 : 0) : 1, id]);
     } else if (entity === "pricings") {
-      await dbRun("UPDATE pricings SET district_id = ?, sangathan_id = ?, magazine_id = ?, edition_id = ?, adv_type_code = ?, adv_size_code = ?, price = ? WHERE id = ?", [data.district_id, data.sangathan_id, data.magazine_id, data.edition_id, data.adv_type_code, data.adv_size_code, Number(data.price), id]);
+      await dbRun("UPDATE pricings SET district_id = ?, sangathan_id = ?, magazine_id = ?, edition_id = ?, adv_type_code = ?, adv_size_code = ?, price = ? WHERE id = ?", [data.district_id, data.sangathan_id, data.magazine_id, data.edition_id, data.adv_type_code, data.adv_size_code, toMoney(data.price), id]);
     } else {
       return res.status(400).json({ error: "Invalid master entity" });
     }
@@ -2297,8 +2327,10 @@ app.delete("/api/admin/masters/:entity/:id", authenticateAdmin, async (req: any,
 // 11.1 Update Publication Production Status
 app.put("/api/admin/order-items/:id/production-status", authenticateAdmin, async (req: any, res: any) => {
   const { id } = req.params;
-  const { production_status } = req.body;
-  const allowed = ["Pending", "Ready for Production", "In Production", "Published", "Completed"];
+  const production_status = req.body.production_status || req.body.productionStatus;
+  // Allowed workflow states. The full workflow is:
+  // Pending → Approved → Preflight → Production → Published → Completed
+  const allowed = ["Pending", "Approved", "Preflight", "Ready for Production", "In Production", "Production", "Published", "Completed"];
   if (!production_status || !allowed.includes(production_status)) {
     return res.status(400).json({ error: "Invalid production status value" });
   }
@@ -2482,7 +2514,7 @@ app.post("/api/admin/pricings/update", authenticateAdmin, async (req: any, res: 
     return res.status(400).json({ error: "Missing id or price parameters" });
   }
   try {
-    await dbRun("UPDATE pricings SET price = ? WHERE id = ?", [Number(price), Number(id)]);
+    await dbRun("UPDATE pricings SET price = ? WHERE id = ?", [toMoney(price), Number(id)]);
     res.json({ success: true, message: "Price updated successfully" });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
