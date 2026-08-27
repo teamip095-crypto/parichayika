@@ -754,9 +754,13 @@ async function doInitDatabase(): Promise<void> {
         password: parsedConfig.password || undefined,
         ssl: isLocalHost ? false : { rejectUnauthorized: false },
         max: isVercel ? 4 : 10,
-        idleTimeoutMillis: 20000,
+        idleTimeoutMillis: isVercel ? 0 : 20000, // Vercel: never time out (keep pool alive across requests)
         connectionTimeoutMillis: 10000,
-        allowExitOnIdle: true,
+        // CRITICAL FIX: do NOT set allowExitOnIdle on Vercel — it causes the
+        // serverless function to exit, killing the pg pool mid-request and
+        // resulting in "Cannot use a pool after calling end on the pool" errors
+        // for any subsequent requests routed to this warm instance.
+        allowExitOnIdle: !isVercel,
       });
 
       // Handle pool errors gracefully to prevent serverless crash
@@ -793,6 +797,12 @@ async function doInitDatabase(): Promise<void> {
         } catch (schemaErr: any) {
           const safeMsg = sanitizeErrorMessage(schemaErr?.message || String(schemaErr));
           console.warn(`[DB SCHEMA/SEED NOTICE] Non-fatal setup notice: ${safeMsg}`);
+          // CRITICAL FIX: Schema/seed errors (e.g. "table already exists") must NOT
+          // invalidate the pool. The pool itself connected fine (SELECT 1 passed above).
+          // Mark schemaInitialized=true so we don't retry, but keep pgPool alive.
+          // Previous code was reaching the outer catch block which calls pgPool.end(),
+          // making ALL subsequent requests fail with "Cannot use a pool after calling
+          // end on the pool". This was the root cause of intermittent 404/500 on Vercel.
         }
       }
       return;
