@@ -1,7 +1,7 @@
 process.env.NODE_ENV = "test";
 
-import { dbGet, dbAll, dbRun, initDatabase, generateAdNumber } from "../server/db.js";
-import { uploadFile, deleteFile, validateUpload } from "../server/storage.js";
+import { dbGet, dbAll, dbRun, initDatabase, generateAdNumber } from "../server/db";
+import { uploadFile, deleteFile, validateUpload } from "../server/storage";
 import jwt from "jsonwebtoken";
 
 interface TestResult {
@@ -222,7 +222,7 @@ async function runTests() {
     );
 
     // 9. Transliteration & Phonetic Engine Tests
-    const { transliterateText } = await import("../server/transliteration.js");
+    const { transliterateText } = await import("../server/transliteration");
     const transName = await transliterateText("Ramesh Sahu");
     recordTest(
       "Transliteration Engine",
