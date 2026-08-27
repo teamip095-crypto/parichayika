@@ -201,7 +201,7 @@ export async function dbRun(sql: string, params: any[] = []): Promise<{ lastID: 
       const pgSql = formatQueryForPg(sql);
       const isInsert = /^\s*INSERT\s+INTO/i.test(sql);
       const queryToRun = isInsert && !pgSql.includes("RETURNING") ? `${pgSql} RETURNING id` : pgSql;
-      
+
       const res = await pgPool.query(queryToRun, params);
       const lastID = res.rows && res.rows[0] && res.rows[0].id ? Number(res.rows[0].id) : 0;
       const changes = res.rowCount || 0;
@@ -209,6 +209,28 @@ export async function dbRun(sql: string, params: any[] = []): Promise<{ lastID: 
     } catch (err: any) {
       const safeMsg = sanitizeErrorMessage(err?.message || String(err));
       console.error(`[PostgreSQL dbRun Error] Code: ${err?.code || "N/A"}, SQL: ${sql.slice(0, 100)}, Error: ${safeMsg}`);
+      // CRITICAL FIX: If pool was ended (Vercel warm instance reuse), re-init.
+      if (err?.message?.includes("pool after calling end") || err?.code === "57P01") {
+        console.warn("[dbRun] Pool was ended, attempting re-initialization...");
+        isPostgres = false;
+        try { await pgPool.end(); } catch {}
+        pgPool = null;
+        initPromise = null;
+        try {
+          await initDatabase();
+          if (isPostgres && pgPool) {
+            const pgSql = formatQueryForPg(sql);
+            const isInsert = /^\s*INSERT\s+INTO/i.test(sql);
+            const queryToRun = isInsert && !pgSql.includes("RETURNING") ? `${pgSql} RETURNING id` : pgSql;
+            const res = await pgPool.query(queryToRun, params);
+            const lastID = res.rows && res.rows[0] && res.rows[0].id ? Number(res.rows[0].id) : 0;
+            const changes = res.rowCount || 0;
+            return { lastID, changes };
+          }
+        } catch (retryErr: any) {
+          console.error("[dbRun] Pool re-init failed:", retryErr?.message);
+        }
+      }
       lastPgError = {
         message: safeMsg,
         code: err?.code,
@@ -291,6 +313,24 @@ export async function dbAll<T = any>(sql: string, params: any[] = []): Promise<T
     } catch (err: any) {
       const safeMsg = sanitizeErrorMessage(err?.message || String(err));
       console.error(`[PostgreSQL dbAll Error] Code: ${err?.code || "N/A"}, SQL: ${sql.slice(0, 100)}, Error: ${safeMsg}`);
+      // CRITICAL FIX: If pool was ended (Vercel warm instance reuse), re-init.
+      if (err?.message?.includes("pool after calling end") || err?.code === "57P01") {
+        console.warn("[dbAll] Pool was ended, attempting re-initialization...");
+        isPostgres = false;
+        try { await pgPool.end(); } catch {}
+        pgPool = null;
+        initPromise = null;
+        try {
+          await initDatabase();
+          if (isPostgres && pgPool) {
+            const pgSql = formatQueryForPg(sql);
+            const res = await pgPool.query(pgSql, params);
+            return res.rows as T[];
+          }
+        } catch (retryErr: any) {
+          console.error("[dbAll] Pool re-init failed:", retryErr?.message);
+        }
+      }
       lastPgError = {
         message: safeMsg,
         code: err?.code,
@@ -363,6 +403,25 @@ export async function dbGet<T = any>(sql: string, params: any[] = []): Promise<T
     } catch (err: any) {
       const safeMsg = sanitizeErrorMessage(err?.message || String(err));
       console.error(`[PostgreSQL dbGet Error] Code: ${err?.code || "N/A"}, SQL: ${sql.slice(0, 100)}, Error: ${safeMsg}`);
+      // CRITICAL FIX: If pool was ended (Vercel warm instance reuse),
+      // reset state and re-initialize ONCE before giving up.
+      if (err?.message?.includes("pool after calling end") || err?.code === "57P01") {
+        console.warn("[dbGet] Pool was ended, attempting re-initialization...");
+        isPostgres = false;
+        try { await pgPool.end(); } catch {}
+        pgPool = null;
+        initPromise = null;
+        try {
+          await initDatabase();
+          if (isPostgres && pgPool) {
+            const pgSql = formatQueryForPg(sql);
+            const res = await pgPool.query(pgSql, params);
+            return res.rows[0] as T | undefined;
+          }
+        } catch (retryErr: any) {
+          console.error("[dbGet] Pool re-init failed:", retryErr?.message);
+        }
+      }
       lastPgError = {
         message: safeMsg,
         code: err?.code,
@@ -764,9 +823,16 @@ async function doInitDatabase(): Promise<void> {
       });
 
       // Handle pool errors gracefully to prevent serverless crash
+      let poolEnded = false;
       pgPool.on("error", (poolErr: any) => {
         const safeMsg = sanitizeErrorMessage(poolErr?.message || String(poolErr));
         console.warn(`[DB POOL NOTICE] Code: ${poolErr?.code || "N/A"}, Msg: ${safeMsg}`);
+        // CRITICAL FIX: if the pool reports it's been ended, mark it so future
+        // dbGet/dbAll/dbRun calls re-initialize instead of trying to use a dead pool.
+        if (poolErr?.message?.includes("pool after calling end") || poolErr?.code === "57P01") {
+          poolEnded = true;
+          isPostgres = false;
+        }
         lastPgError = {
           message: safeMsg,
           code: poolErr?.code,
