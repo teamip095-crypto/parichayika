@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
-  "buildCommand": "vite build && esbuild server/index.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+  "buildCommand": "vite build && esbuild server/index.ts --bundle --platform=node --format=cjs --external:vite --external:sql.js --external:pg-native --external:bufferutil --external:utf-8-validate --sourcemap --outfile=dist/server.cjs",
   "outputDirectory": "dist",
   "functions": {
     "api/[...slug].ts": {
