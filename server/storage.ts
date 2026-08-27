@@ -142,6 +142,16 @@ export async function uploadFile(options: {
   }
 
   // 2. Development / Fallback Mode: Local Filesystem Storage
+  // On Vercel production (read-only filesystem), local writes would silently fail.
+  // Refuse here so misconfiguration surfaces as a clear error instead of EROFS.
+  const isVercelRuntime = Boolean(process.env.VERCEL || process.env.VERCEL_ENV || process.env.AWS_LAMBDA_FUNCTION_NAME);
+  if (isVercelRuntime) {
+    throw new Error(
+      "Supabase Storage is not configured (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY env vars required). " +
+      "Local filesystem uploads are not supported on Vercel serverless runtime."
+    );
+  }
+
   const uploadsDir = path.join(process.cwd(), "uploads", folder);
   if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir, { recursive: true });

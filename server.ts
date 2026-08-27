@@ -13,9 +13,9 @@ import {
   generateAdNumber,
   isPostgres,
   getSafeDbDiagnostics
-} from "./server/db.js";
-import { uploadFile, validateUpload } from "./server/storage.js";
-import { transliterateText } from "./server/transliteration.js";
+} from "./server/db";
+import { uploadFile, validateUpload } from "./server/storage";
+import { transliterateText } from "./server/transliteration";
 
 // Load environment variables
 dotenv.config();
@@ -41,8 +41,12 @@ const JWT_SECRET = getJwtSecret();
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
-// Configure static uploads directory serving (for local fallback files)
-app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+// Configure static uploads directory serving (only for local development).
+// On Vercel serverless runtime the filesystem is read-only and uploads are
+// persisted to Supabase Storage — this middleware is a no-op there.
+if (!process.env.VERCEL && !process.env.VERCEL_ENV && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+}
 
 // JWT Authentication Middleware for Super Admin (Enforces role-based access control)
 const authenticateAdmin = (req: any, res: any, next: any) => {
