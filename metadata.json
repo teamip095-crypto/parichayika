@@ -1,0 +1,8 @@
+{
+  "name": "परिचायिका",
+  "description": "साहू समाज युवक-युवती परिचय सम्मेलन की प्रविष्टियाँ, व्यवसाय विज्ञापन, भुगतान व्यवस्था एवं प्रिंट-प्रोडक्शन प्रबंधन एप्प",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
