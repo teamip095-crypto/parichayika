@@ -13,9 +13,9 @@ import {
   generateAdNumber,
   isPostgres,
   getSafeDbDiagnostics
-} from "./server/db.ts";
-import { uploadFile, validateUpload } from "./server/storage.ts";
-import { transliterateText } from "./server/transliteration.ts";
+} from "./server/db";
+import { uploadFile, validateUpload } from "./server/storage";
+import { transliterateText } from "./server/transliteration";
 
 // Load environment variables
 dotenv.config();

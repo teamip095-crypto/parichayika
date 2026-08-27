@@ -9,21 +9,21 @@
  *   Request → Vercel routing → api/[...slug].ts → Express app → route handlers
  *
  * IMPORTANT — Vercel bundling note:
- *   @vercel/node@7+ runs TS via Node's ESM loader (NO esbuild bundling).
- *   Node ESM strictly requires the EXACT file extension on relative imports.
- *   That's why we use "../server.ts" and "../server/db.ts" here, and why
- *   the same files inside server.ts use "../server/db" without extension
- *   only when bundled by esbuild locally.
+ *   @vercel/node@7+ transpiles TS to JS but does NOT rewrite ".ts" extensions
+ *   in import paths. Using "../server.ts" causes ERR_MODULE_NOT_FOUND at runtime
+ *   because the deployed file is server.js (not server.ts).
  *
- *   To keep both worlds working, we set tsconfig `allowImportingTsExtensions: true`
- *   and use explicit ".ts" extensions on every relative import in this file
- *   AND in server.ts + server/*.ts. Vercel then transpiles everything to a
- *   single Node-runnable file.
+ *   Using extensionless imports ("../server", "../server/db") lets Vercel's
+ *   bundler resolve them correctly at build time. The same extensionless
+ *   imports also work locally with esbuild bundling.
+ *
+ *   See tsconfig.json — moduleResolution: "bundler" + allowImportingTsExtensions: false
+ *   ensures extensionless imports are valid in BOTH environments.
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import app from "../server.ts";
-import { initDatabase } from "../server/db.ts";
+import app from "../server";
+import { initDatabase } from "../server/db";
 
 // DB init is fired once per cold start, non-blocking.
 // /api/health must respond even if DB connection is still warming up.
