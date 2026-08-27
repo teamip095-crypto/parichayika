@@ -2710,6 +2710,13 @@ app.all("/api/*", (req: any, res: any) => {
 // Export app for serverless function entrypoints (Vercel)
 export default app;
 
+// Re-export for the Vercel serverless entry (api/[...slug].ts) which loads
+// the pre-bundled dist/server.cjs. These named exports let the entry file
+// trigger DB initialization at cold start without duplicating logic.
+export { initDatabase, isPostgres, getSafeDbDiagnostics } from "./db";
+export { uploadFile, validateUpload } from "./storage";
+export { transliterateText } from "./transliteration";
+
 // Setup dev server or static distribution build (Standalone / Container runtime)
 async function startServer() {
   if (process.env.VERCEL || process.env.VERCEL_ENV || process.env.AWS_LAMBDA_FUNCTION_NAME) {
