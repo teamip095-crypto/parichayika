@@ -199,8 +199,13 @@ export async function dbRun(sql: string, params: any[] = []): Promise<{ lastID: 
   if (isPostgres && pgPool) {
     try {
       const pgSql = formatQueryForPg(sql);
-      const isInsert = /^\s*INSERT\s+INTO/i.test(sql);
-      const queryToRun = isInsert && !pgSql.includes("RETURNING") ? `${pgSql} RETURNING id` : pgSql;
+      // Add RETURNING id ONLY for INSERTs into tables that have an `id` column.
+      // Tables WITHOUT id (e.g. settings, audit_logs key-only) would error out.
+      const TABLES_WITHOUT_ID = new Set(["settings"]);
+      const isInsert = /^\s*INSERT\s+INTO\s+([a-z_]+)/i.exec(sql);
+      const tableName = isInsert ? isInsert[1].toLowerCase() : "";
+      const hasIdColumn = tableName && !TABLES_WITHOUT_ID.has(tableName);
+      const queryToRun = hasIdColumn && !pgSql.includes("RETURNING") ? `${pgSql} RETURNING id` : pgSql;
 
       const res = await pgPool.query(queryToRun, params);
       const lastID = res.rows && res.rows[0] && res.rows[0].id ? Number(res.rows[0].id) : 0;
@@ -220,9 +225,11 @@ export async function dbRun(sql: string, params: any[] = []): Promise<{ lastID: 
           await initDatabase();
           if (isPostgres && pgPool) {
             const pgSql = formatQueryForPg(sql);
-            const isInsert = /^\s*INSERT\s+INTO/i.test(sql);
-            const queryToRun = isInsert && !pgSql.includes("RETURNING") ? `${pgSql} RETURNING id` : pgSql;
-            const res = await pgPool.query(queryToRun, params);
+            const isInsertMatch = /^\s*INSERT\s+INTO\s+([a-z_]+)/i.exec(sql);
+            const tblName = isInsertMatch ? isInsertMatch[1].toLowerCase() : "";
+            const hasIdCol = tblName && tblName !== "settings";
+            const retryQuery = hasIdCol && !pgSql.includes("RETURNING") ? `${pgSql} RETURNING id` : pgSql;
+            const res = await pgPool.query(retryQuery, params);
             const lastID = res.rows && res.rows[0] && res.rows[0].id ? Number(res.rows[0].id) : 0;
             const changes = res.rowCount || 0;
             return { lastID, changes };
