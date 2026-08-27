@@ -3,24 +3,27 @@
  *
  * This file is the SINGLE serverless function exposed on Vercel.
  * The `[...slug]` filename makes Vercel route EVERY /api/* request
- * (and /api itself) to this handler. No vercel.json rewrites are needed
- * for /api/* — Vercel's filesystem routing handles it natively.
+ * (and /api itself) to this handler.
  *
  * Architecture:
  *   Request → Vercel routing → api/[...slug].ts → Express app → route handlers
  *
- * The Express app (server.ts) already defines all 51 /api/* routes.
- * We only forward the request to that Express instance.
+ * IMPORTANT — Vercel bundling note:
+ *   @vercel/node@7+ runs TS via Node's ESM loader (NO esbuild bundling).
+ *   Node ESM strictly requires the EXACT file extension on relative imports.
+ *   That's why we use "../server.ts" and "../server/db.ts" here, and why
+ *   the same files inside server.ts use "../server/db" without extension
+ *   only when bundled by esbuild locally.
  *
- * IMPORTANT: imports use NO file extension so @vercel/node's esbuild bundler
- * resolves them at build time and inlines server.ts + server/db.ts + etc.
- * into the deployed function. The phantom ".js" imports in the previous
- * api/index.ts caused ERR_MODULE_NOT_FOUND → Vercel 404.
+ *   To keep both worlds working, we set tsconfig `allowImportingTsExtensions: true`
+ *   and use explicit ".ts" extensions on every relative import in this file
+ *   AND in server.ts + server/*.ts. Vercel then transpiles everything to a
+ *   single Node-runnable file.
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import app from "../server";
-import { initDatabase } from "../server/db";
+import app from "../server.ts";
+import { initDatabase } from "../server/db.ts";
 
 // DB init is fired once per cold start, non-blocking.
 // /api/health must respond even if DB connection is still warming up.
@@ -35,9 +38,6 @@ function ensureDbStarted() {
 }
 
 export default function handler(req: VercelRequest, res: VercelResponse) {
-  // Vercel preserves the original req.url (e.g. "/api/health?x=1") for
-  // catch-all routes, so we do NOT need to rewrite the URL — Express will
-  // match the request directly against its registered /api/* routes.
   ensureDbStarted();
   return (app as any)(req, res);
 }
