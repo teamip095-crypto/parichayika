@@ -321,17 +321,17 @@ export function applyPostTransliterationFixes(text: string): string {
   if (!text) return text;
   let fixed = text;
 
-  // Surnames & Titles
+  // Surnames & Titles — normalize common phonetic variants of "साहू" surname
   fixed = fixed.replace(/सहु\b/g, "साहू");
   fixed = fixed.replace(/\bसहु\b/g, "साहू");
-  fixed = fixed.replace(/सहु/g, "साहू");
   fixed = fixed.replace(/शाहू/g, "साहू");
   fixed = fixed.replace(/सहू/g, "साहू");
   fixed = fixed.replace(/अश्वनी/g, "अश्विनी");
   fixed = fixed.replace(/अश्विनि/g, "अश्विनी");
   fixed = fixed.replace(/साहूू/g, "साहू");
-  fixed = fixed.replace(/राम कुमार/g, "रामकुमार");
-  fixed = fixed.replace(/राज कुमार/g, "राजकुमार");
+  // Normalize multiple spaces to a single space (do NOT strip spaces between words —
+  // multi-word inputs like "Ram Kumar" must remain "राम कुमार" with the space preserved).
+  fixed = fixed.replace(/[ ]{2,}/g, " ");
 
   return fixed;
 }
