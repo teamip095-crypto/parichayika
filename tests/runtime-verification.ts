@@ -248,7 +248,7 @@ async function runTests() {
     );
 
     // Import Vercel Serverless entry handler
-    const { default: vercelHandler } = await import("../api/[...slug]");
+    const { default: vercelHandler } = await import("../api/index");
 
     // 10. Vercel Serverless GET /api/health Test
     let healthResponse: any = null;

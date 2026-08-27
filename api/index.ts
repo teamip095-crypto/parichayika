@@ -70,6 +70,15 @@ async function getApp() {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const app = await getApp();
+    // Vercel may rewrite req.url — ensure Express sees the original /api/* path
+    // so route matching works correctly.
+    if (req.url && !req.url.startsWith("/api") && !req.url.startsWith("/uploads")) {
+      // Already rewritten by Vercel to "/api" — reconstruct from req.query.slug if present
+      const slug = (req.query?.slug as string) || (req.query?.slug);
+      if (slug) {
+        req.url = `/api/${Array.isArray(slug) ? slug.join("/") : slug}`;
+      }
+    }
     return (app as any)(req, res);
   } catch (err: any) {
     console.error("[parichayika] Handler init error:", err?.message || err);
