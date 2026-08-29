@@ -570,12 +570,14 @@ app.get("/api/advertisements/next-ad-number", async (req: any, res: any) => {
   try {
     if (typeCode === "matrimony") {
       const countRow = await dbGet("SELECT COUNT(*) as count FROM advertisements WHERE type_code = 'matrimony'");
-      const nextSeq = String((countRow?.count || 0) + 1).padStart(3, "0");
-      return res.json({ nextAdNumber: nextSeq, count: countRow?.count || 0 });
+      const currentCount = Number(countRow?.count || 0);
+      const nextSeq = String(currentCount + 1).padStart(3, "0");
+      return res.json({ nextAdNumber: nextSeq, count: currentCount });
     } else {
       const countRow = await dbGet("SELECT COUNT(*) as count FROM advertisements WHERE type_code = 'business'");
-      const nextSeq = String((countRow?.count || 0) + 1).padStart(3, "0");
-      return res.json({ nextAdNumber: `BUS-${nextSeq} / ${magazineHi}`, count: countRow?.count || 0 });
+      const currentCount = Number(countRow?.count || 0);
+      const nextSeq = String(currentCount + 1).padStart(3, "0");
+      return res.json({ nextAdNumber: `BUS-${nextSeq} / ${magazineHi}`, count: currentCount });
     }
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -732,7 +734,7 @@ app.post("/api/advertisements/save", async (req: any, res: any) => {
         }
       } else {
         const countRow = await dbGet<{ count: number }>("SELECT COUNT(*) as count FROM advertisements WHERE type_code = 'business'");
-        let nextSeq = (countRow?.count || 0) + 1;
+        let nextSeq = Number(countRow?.count || 0) + 1;
         finalAdNum = `BUS-${String(nextSeq).padStart(3, "0")} / ${magazine_hi}`;
         while (await dbGet("SELECT id FROM advertisements WHERE ad_number = ?", [finalAdNum])) {
           nextSeq++;
@@ -1214,7 +1216,7 @@ app.post("/api/cart/add-business", async (req: any, res: any) => {
 
       // Auto-generate Ad Number for this item
       const countRow = await dbGet("SELECT COUNT(*) as count FROM advertisements WHERE type_code = 'business'");
-      const nextSeq = String((countRow?.count || 0) + 1 + i).padStart(3, "0");
+      const nextSeq = String(Number(countRow?.count || 0) + 1 + i).padStart(3, "0");
       const adNumber = `BUS-${nextSeq} / ${magazine.name_hi}`;
 
       const itemData = {
@@ -1619,6 +1621,7 @@ app.get("/api/orders/:orderId", async (req: any, res: any) => {
     });
     res.json({
       ...order,
+      total_amount: toMoney(order.total_amount),
       items: enrichedItems
     });
   } catch (error: any) {
@@ -1665,7 +1668,7 @@ app.get("/api/orders/:orderId/invoice", async (req: any, res: any) => {
     res.json({
       invoice_number: invoiceNumber,
       order_id: order.order_id,
-      total_amount: order.total_amount,
+      total_amount: toMoney(order.total_amount),
       payment_status: "PAID",
       payment_ref: order.payment_ref || "UPI_VERIFIED",
       payment_date: order.payment_date || order.verification_time || order.created_at,
@@ -2070,11 +2073,11 @@ app.get("/api/admin/dashboard", authenticateAdmin, async (req: any, res: any) =>
 
     res.json({
       counts: {
-        totalOrders: totalOrders?.count || 0,
-        totalAds: totalAds?.count || 0,
-        pendingOrders: pendingOrders?.count || 0,
-        verifiedOrders: verifiedOrders?.count || 0,
-        totalRevenue: totalRevenue?.total || 0
+        totalOrders: Number(totalOrders?.count || 0),
+        totalAds: Number(totalAds?.count || 0),
+        pendingOrders: Number(pendingOrders?.count || 0),
+        verifiedOrders: Number(verifiedOrders?.count || 0),
+        totalRevenue: toMoney(totalRevenue?.total || 0)
       },
       status: "active"
     });
