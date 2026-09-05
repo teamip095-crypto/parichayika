@@ -878,17 +878,21 @@ export default function App() {
             }
           }
         } catch (jsonErr) {
-          console.warn("Base64 upload endpoint failed, falling back to embedded photo:", jsonErr);
+          console.warn("Base64 upload endpoint also failed:", jsonErr);
         }
 
-        // Layer 3: Direct Base64 data URL persistence in form state so submission NEVER fails!
-        if (screen === "matrimony_form") {
-          setMatrimonyForm((prev) => ({ ...prev, [fieldName]: base64Data }));
-        } else if (screen === "business_form") {
-          setBusinessForm((prev) => ({ ...prev, [fieldName]: base64Data }));
-        }
-        setUploadSuccesses((prev) => ({ ...prev, [fieldName]: true }));
-        showToast("✓ फोटो लोड हो गई है!", "success");
+        // ❌ OLD Layer 3 (REMOVED): silently stored base64 data URL in form state.
+        // This caused 717KB-3.7MB base64 strings to be persisted in PostgreSQL
+        // (matrimony_profiles.photo_url, advertisements.uploaded_jpg_url, order_items),
+        // bloating the database by 74 MB across just 9 records.
+        // It also broke production — admin panel couldn't display these data URLs
+        // reliably, and Supabase Storage URLs were never generated for real.
+        //
+        // ✅ NEW: Surface the real upload failure to the user. They can retry
+        // or contact support — instead of silently proceeding with a broken
+        // base64 string that masquerades as a successful upload.
+        setUploadErrors((prev) => ({ ...prev, [fieldName]: "फोटो अपलोड करने में समस्या आई। कृपया पुनः प्रयास करें या सपोर्ट से संपर्क करें।" }));
+        showToast("❌ फोटो अपलोड विफल। कृपया पुनः प्रयास करें।", "error");
       } else {
         setUploadErrors((prev) => ({ ...prev, [fieldName]: "फोटो अपलोड करने में समस्या आई। कृपया पुनः प्रयास करें।" }));
         showToast("फोटो अपलोड करने में समस्या आई।", "error");

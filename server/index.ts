@@ -152,12 +152,20 @@ async function getMaxMatrimonyAdSeq(): Promise<number> {
 app.get(["/api/health", "/health"], (req: any, res: any) => {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
   const dbDiagnostics = getSafeDbDiagnostics();
+  // Storage health check: BOTH SUPABASE_URL AND SUPABASE_SERVICE_ROLE_KEY must be set.
+  // Reporting "supabase" when only URL is set (but key missing) was misleading and
+  // hid the real production bug where uploads silently fell back to base64.
+  const hasSupabaseUrl = !!process.env.SUPABASE_URL;
+  const hasSupabaseServiceKey = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const storageStatus = (hasSupabaseUrl && hasSupabaseServiceKey) ? "supabase"
+                     : hasSupabaseUrl ? "supabase_misconfigured_key_missing"
+                     : "unconfigured";
   return res.status(200).json({
     status: "ok",
     service: "parichayika-api",
     environment: process.env.NODE_ENV || "production",
     database: isPostgres ? "postgresql" : (dbDiagnostics.configured ? "postgresql_configured" : "ready"),
-    storage: process.env.SUPABASE_URL ? "supabase" : "local",
+    storage: storageStatus,
     timestamp: new Date().toISOString()
   });
 });
