@@ -1,4 +1,10 @@
+node_modules/
+dist/
+.vite/
 .vercel
-.env*
-.vercel
-.env*
+.env
+.env.local
+.env.*.local
+data/*.db
+uploads/
+*.log
