@@ -2891,6 +2891,44 @@ export default function App() {
                                 )}
                               </div>
 
+                              {/* FIX: If admin_configurations exist, show them as quick-select dropdown */}
+                              {userConfigs.length > 0 && (
+                                <div className="mb-2">
+                                  <label className="text-[11px] font-bold text-stone-700 block mb-1">
+                                    एडमिन कॉन्फ़िगरेशन से चुनें (Quick Select from Admin Config)
+                                  </label>
+                                  <select
+                                    value=""
+                                    onChange={(e) => {
+                                      const confId = e.target.value;
+                                      if (!confId) return;
+                                      const conf = userConfigs.find((c) => c.configuration_id === confId);
+                                      if (conf) {
+                                        handleUpdateMatrimonyPublicationRow(idx, "district_id", 0);
+                                        handleUpdateMatrimonyPublicationRow(idx, "sangathan_id", 0);
+                                        handleUpdateMatrimonyPublicationRow(idx, "magazine_id", 0);
+                                        handleUpdateMatrimonyPublicationRow(idx, "edition_id", 0);
+                                        // Store the config data directly in the publication row
+                                        handleUpdateMatrimonyPublicationRow(idx, "district_hi" as any, conf.district);
+                                        handleUpdateMatrimonyPublicationRow(idx, "sangathan_hi" as any, conf.sangathan);
+                                        handleUpdateMatrimonyPublicationRow(idx, "magazine_hi" as any, conf.magazine);
+                                        handleUpdateMatrimonyPublicationRow(idx, "edition_hi" as any, conf.edition);
+                                        handleUpdateMatrimonyPublicationRow(idx, "price" as any, Number(conf.pricing));
+                                      }
+                                    }}
+                                    className="w-full px-3 py-2 bg-orange-50 border border-orange-300 rounded-xl text-xs font-bold text-stone-800 outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
+                                  >
+                                    <option value="">-- एडमिन कॉन्फ़िगरेशन चुनें --</option>
+                                    {userConfigs.map((cfg) => (
+                                      <option key={cfg.configuration_id} value={cfg.configuration_id}>
+                                        {cfg.district} • {cfg.sangathan} • {cfg.magazine} • {cfg.edition} • ₹{Number(cfg.pricing).toLocaleString("en-IN")}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              )}
+
+                              {/* Manual dropdowns — also work if admin added masters data */}
                               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                                 {/* 1. District */}
                                 <div>
@@ -2967,7 +3005,7 @@ export default function App() {
                                   Admin Master अनुसार व्यक्तिगत दर (Individual Rate):
                                 </span>
                                 <span className="text-sm font-black text-orange-800 font-mono">
-                                  ₹{rate.toLocaleString("en-IN")}
+                                  ₹{(pub.price ? Number(pub.price) : rate).toLocaleString("en-IN")}/-
                                 </span>
                               </div>
                             </div>
@@ -2984,7 +3022,7 @@ export default function App() {
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-bold text-stone-700">कुल देय राशि:</span>
                             <span className="text-2xl font-black text-orange-800 font-mono">
-                              ₹{matrimonyPublications.reduce((sum, p) => sum + getMatrimonyPublicationRate(p.district_id, p.sangathan_id, p.magazine_id, p.edition_id, p.size_code), 0).toLocaleString("en-IN")}
+                              ₹{matrimonyPublications.reduce((sum, p) => sum + (p.price ? Number(p.price) : getMatrimonyPublicationRate(p.district_id, p.sangathan_id, p.magazine_id, p.edition_id, p.size_code)), 0).toLocaleString("en-IN")}/-
                             </span>
                           </div>
                         </div>
