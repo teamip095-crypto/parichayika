@@ -2699,8 +2699,8 @@ export default function App() {
 
                         {/* Main Body: Left Column (Spacious details) + Right Column (Passport Photo) */}
                         <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 items-start">
-                          {/* Left Column: All text info, clean spacious rows, highly legible */}
-                          <div className="flex-1 min-w-0 w-full space-y-2 text-xs sm:text-[13px] leading-relaxed text-stone-900 font-sans">
+                          {/* Left Column: All text info — SAME ORDER as Step 1 Live Preview */}
+                        <div className="flex-1 min-w-0 w-full space-y-2 text-xs sm:text-[13px] leading-relaxed text-stone-900 font-sans">
                             {/* Row 1: DOB and Height in two balanced columns */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
                               <div className="flex items-center gap-1.5 min-w-0">
@@ -2729,6 +2729,18 @@ export default function App() {
                               </div>
                             </div>
 
+                            {/* FIX: Education + Occupation go RIGHT AFTER gotra/blood, BEFORE father — matches Step 1 Live Preview */}
+                            <div className="flex items-start gap-1.5 min-w-0">
+                              <span className="w-16 sm:w-20 font-black text-stone-950 shrink-0">शिक्षा</span>
+                              <span className="text-stone-400 font-bold shrink-0">:</span>
+                              <span className="font-bold text-stone-800 break-words flex-1">{matrimonyForm.education || "-"}</span>
+                            </div>
+                            <div className="flex items-start gap-1.5 min-w-0">
+                              <span className="w-16 sm:w-20 font-black text-stone-950 shrink-0">व्यवसाय</span>
+                              <span className="text-stone-400 font-bold shrink-0">:</span>
+                              <span className="font-bold text-stone-800 break-words flex-1">{matrimonyForm.occupation || "-"}</span>
+                            </div>
+
                             {/* Row 3: Father Name */}
                             <div className="flex items-start gap-1.5 min-w-0 pt-0.5">
                               <span className="w-16 sm:w-20 font-black text-stone-950 shrink-0">पिता</span>
@@ -2750,27 +2762,16 @@ export default function App() {
                               <span className="font-bold text-stone-800 break-words flex-1">{matrimonyForm.mother_name || "-"}</span>
                             </div>
 
-                            {/* Row 6: Occupation */}
-                            <div className="flex items-start gap-1.5 min-w-0">
-                              <span className="w-16 sm:w-20 font-black text-stone-950 shrink-0">व्यवसाय</span>
-                              <span className="text-stone-400 font-bold shrink-0">:</span>
-                              <span className="font-bold text-stone-800 break-words flex-1">{matrimonyForm.occupation || "-"}</span>
-                            </div>
-
-                            {/* Row 7: Education */}
+                            {/* FIX: Show BOTH addresses — वर्तमान पता + स्थायी पता (separate lines) */}
                             <div className="flex items-start gap-1.5 min-w-0 pt-1 border-t border-stone-200">
-                              <span className="w-16 sm:w-20 font-black text-stone-950 shrink-0">शिक्षा</span>
+                              <span className="w-16 sm:w-20 font-black text-stone-950 shrink-0">वर्तमान पता</span>
                               <span className="text-stone-400 font-bold shrink-0">:</span>
-                              <span className="font-bold text-stone-800 break-words flex-1">{matrimonyForm.education || "-"}</span>
+                              <span className="font-bold text-stone-800 break-words flex-1">{matrimonyForm.currentAddress || "-"}</span>
                             </div>
-
-                            {/* Row 8: Address */}
                             <div className="flex items-start gap-1.5 min-w-0">
-                              <span className="w-16 sm:w-20 font-black text-stone-950 shrink-0">पता</span>
+                              <span className="w-16 sm:w-20 font-black text-stone-950 shrink-0">स्थायी पता</span>
                               <span className="text-stone-400 font-bold shrink-0">:</span>
-                              <span className="font-bold text-stone-800 break-words flex-1">
-                                {matrimonyForm.currentAddress || matrimonyForm.permanentAddress || "-"}
-                              </span>
+                              <span className="font-bold text-stone-800 break-words flex-1">{matrimonyForm.permanentAddress || "-"}</span>
                             </div>
                           </div>
 

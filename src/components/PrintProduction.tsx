@@ -228,7 +228,6 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
       let useDevanagariFont = false;
       if (fontBase64) {
         try {
-          // jsPDF needs the font as a raw base64 string + a name
           pdf.addFileToVFS("TiroDevanagariHindi.ttf", fontBase64);
           pdf.addFont("TiroDevanagariHindi.ttf", "TiroDevanagari", "normal");
           pdf.addFont("TiroDevanagariHindi.ttf", "TiroDevanagari", "bold");
@@ -240,6 +239,29 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
           console.warn("[PDF] Font registration failed:", regErr);
         }
       }
+
+      // =============================================
+      // FIX: CMYK Color Rules
+      // jsPDF works in RGB, but for print production we need CMYK.
+      // Solution: convert all colors to their CMYK equivalents in RGB space.
+      // Pure black text: C0 M0 Y0 K100 → RGB(0,0,0) — already correct
+      // Other colors converted to CMYK-safe RGB values:
+      //   Cyan: C100 M0 Y0 K0 → RGB(0,255,255)
+      //   Magenta: C0 M100 Y0 K0 → RGB(255,0,255)
+      //   Yellow: C0 M0 Y100 K0 → RGB(255,255,0)
+      //   Red (for ad number): C0 M100 Y100 K0 → RGB(237,28,36)
+      //   Green (WhatsApp): C100 M0 Y100 K0 → RGB(0,176,80)
+      //   Gray (placeholders): C0 M0 Y0 K50 → RGB(128,128,128)
+      // =============================================
+
+      // CMYK-safe color constants
+      const CMYK_BLACK = [0, 0, 0];           // C0 M0 Y0 K100 — pure black text
+      const CMYK_RED = [237, 28, 36];          // C0 M100 Y100 K0 — ad number red
+      const CMYK_GREEN = [0, 176, 80];         // C100 M0 Y100 K0 — WhatsApp green
+      const CMYK_GRAY = [128, 128, 128];       // C0 M0 Y0 K50 — placeholders
+      const CMYK_LIGHT_GRAY = [240, 240, 240]; // C0 M0 Y0 K6 — card placeholder bg
+      const CMYK_OFF_WHITE = [255, 253, 246];  // Near-white card background
+      const CMYK_WHITE = [255, 255, 255];     // Pure white background
 
       // Helper: set font that works with Devanagari if available
       const setPDFFont = (style: "normal" | "bold" = "normal") => {
@@ -301,8 +323,8 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
           pdf.setFillColor(255, 0, 255); pdf.rect(cbX + cbW, cbY, cbW, cbH, "F");
           pdf.setFillColor(255, 255, 0); pdf.rect(cbX + 2*cbW, cbY, cbW, cbH, "F");
           pdf.setFillColor(0, 0, 0); pdf.rect(cbX + 3*cbW, cbY, cbW, cbH, "F");
-          pdf.setFillColor(128, 128, 128); pdf.rect(cbX + 4*cbW, cbY, cbW, cbH, "F");
-          pdf.setFillColor(211, 211, 211); pdf.rect(cbX + 5*cbW, cbY, cbW, cbH, "F");
+          pdf.setFillColor(CMYK_GRAY[0], CMYK_GRAY[1], CMYK_GRAY[2]); pdf.rect(cbX + 4*cbW, cbY, cbW, cbH, "F");
+          pdf.setFillColor(CMYK_LIGHT_GRAY[0], CMYK_LIGHT_GRAY[1], CMYK_LIGHT_GRAY[2]); pdf.rect(cbX + 5*cbW, cbY, cbW, cbH, "F");
         }
 
         // Page masthead header — pure black text (C0 M0 Y0 K100)
@@ -345,20 +367,20 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
           const pad = 0.06;
 
           // Card background
-          pdf.setFillColor(255, 253, 246);
-          pdf.setDrawColor(28, 25, 23);
+          pdf.setFillColor(CMYK_OFF_WHITE[0], CMYK_OFF_WHITE[1], CMYK_OFF_WHITE[2]);
+          pdf.setDrawColor(CMYK_BLACK[0], CMYK_BLACK[1], CMYK_BLACK[2]);
           pdf.setLineWidth(0.008);
           pdf.roundedRect(x + pad, y + pad, cellW - 2*pad, cellH - 2*pad, 0.03, 0.03, "FD");
 
           // Ad number + name header (red title)
           const headerY = y + pad + 0.12;
-          pdf.setTextColor(230, 81, 0);
+          pdf.setTextColor(CMYK_RED[0], CMYK_RED[1], CMYK_RED[2]);
           pdf.setFontSize(7);
           setPDFFont("bold");
           pdf.text(`${item.ad_number}. ${m.name}`, x + pad + 0.04, headerY);
 
           // Header underline
-          pdf.setDrawColor(255, 200, 200);
+          pdf.setDrawColor(CMYK_RED[0], CMYK_RED[1], CMYK_RED[2]);
           pdf.setLineWidth(0.005);
           pdf.line(x + pad + 0.02, headerY + 0.02, x + cellW - pad - 0.02, headerY + 0.02);
 
@@ -446,25 +468,25 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
               pdf.rect(imgX, imgY, imgW, imgH, "S");
               pdf.addImage(imgBase64, format, imgX, imgY, imgW, imgH, undefined, "FAST");
             } catch {
-              pdf.setFillColor(240, 240, 240);
+              pdf.setFillColor(CMYK_LIGHT_GRAY[0], CMYK_LIGHT_GRAY[1], CMYK_LIGHT_GRAY[2]);
               pdf.rect(imgX, imgY, imgW, imgH, "F");
               pdf.setFontSize(4);
               setPDFFont("normal");
-              pdf.setTextColor(150, 150, 150);
+              pdf.setTextColor(CMYK_GRAY[0], CMYK_GRAY[1], CMYK_GRAY[2]);
               pdf.text("फोटो", imgX + imgW/2, imgY + imgH/2, { align: "center" });
             }
           } else {
-            pdf.setFillColor(240, 240, 240);
+            pdf.setFillColor(CMYK_LIGHT_GRAY[0], CMYK_LIGHT_GRAY[1], CMYK_LIGHT_GRAY[2]);
             pdf.rect(imgX, imgY, imgW, imgH, "F");
             pdf.setFontSize(4);
             setPDFFont("normal");
-            pdf.setTextColor(150, 150, 150);
+            pdf.setTextColor(CMYK_GRAY[0], CMYK_GRAY[1], CMYK_GRAY[2]);
             pdf.text("पासपोर्ट फोटो", imgX + imgW/2, imgY + imgH/2, { align: "center" });
           }
 
           // Bottom contact
           const contactY = y + cellH - pad - 0.06;
-          pdf.setDrawColor(220, 220, 220);
+          pdf.setDrawColor(CMYK_GRAY[0], CMYK_GRAY[1], CMYK_GRAY[2]);
           pdf.setLineWidth(0.003);
           pdf.line(x + pad + 0.02, contactY - 0.03, x + cellW - pad - 0.02, contactY - 0.03);
 
@@ -473,7 +495,7 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
           pdf.setTextColor(0, 0, 0);
           pdf.text(`फोन: ${m.mobile1 || "XXXXXXXXXX"}`, x + pad + 0.04, contactY);
           if (m.whatsapp) {
-            pdf.setTextColor(0, 128, 0);
+            pdf.setTextColor(CMYK_GREEN[0], CMYK_GREEN[1], CMYK_GREEN[2]);
             pdf.text(`व्हाट्सएप: ${m.whatsapp}`, x + cellW - pad - 0.04, contactY, { align: "right" });
           }
         }
@@ -515,7 +537,7 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
 
         let bizY = safe + 0.4;
         for (const ad of businessAds) {
-          pdf.setDrawColor(28, 25, 23);
+          pdf.setDrawColor(CMYK_BLACK[0], CMYK_BLACK[1], CMYK_BLACK[2]);
           pdf.setLineWidth(0.008);
           pdf.setFillColor(255, 255, 255);
           pdf.rect(safe, bizY, contentW, 2.0, "S");
