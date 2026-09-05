@@ -596,8 +596,11 @@ app.get("/api/advertisements/next-ad-number", async (req: any, res: any) => {
 app.post("/api/advertisements/save", async (req: any, res: any) => {
   const { adId, typeCode, publicationId, sizeCode, customerName, customerMobile, sessionId: rawSessionId, formData = {} } = req.body;
   const sessionId = (rawSessionId || formData.sessionId || req.query?.sessionId || "").toString().trim();
-  const effectiveCustomerName = customerName || (typeCode === "business" ? "व्यवसायिक विज्ञापन" : "");
-  const effectiveCustomerMobile = customerMobile || (typeCode === "business" ? "9999999999" : "");
+  // Trim and validate customerName/customerMobile — whitespace-only values must be rejected.
+  const trimmedName = (customerName || "").toString().trim();
+  const trimmedMobile = (customerMobile || "").toString().trim();
+  const effectiveCustomerName = trimmedName || (typeCode === "business" ? "व्यवसायिक विज्ञापन" : "");
+  const effectiveCustomerMobile = trimmedMobile || (typeCode === "business" ? "9999999999" : "");
   if (!typeCode || !effectiveCustomerName || !effectiveCustomerMobile) {
     return res.status(400).json({ error: "Required fields are missing" });
   }
