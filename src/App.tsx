@@ -2613,14 +2613,14 @@ export default function App() {
                             </div>
 
                             <div className="pt-1 border-t border-stone-200 space-y-1">
-                              {/* FIX: Changed "वि. पता" to "वर्तमान पता" per client request */}
+                              {/* FIX: Show full "वर्तमान पता" not just "वर्तमान" */}
                               <div className="flex items-start min-w-0">
-                                <span className="w-12 text-stone-950 font-black shrink-0">वर्तमान</span>
+                                <span className="w-[60px] text-stone-950 font-black shrink-0">वर्तमान पता</span>
                                 <span className="text-stone-400 mx-0.5 shrink-0">:</span>
                                 <span className="text-stone-800 flex-1 break-words">{matrimonyForm.currentAddress || "-"}</span>
                               </div>
                               <div className="flex items-start min-w-0">
-                                <span className="w-12 text-stone-950 font-black shrink-0">स्थायी</span>
+                                <span className="w-[60px] text-stone-950 font-black shrink-0">स्थायी पता</span>
                                 <span className="text-stone-400 mx-0.5 shrink-0">:</span>
                                 <span className="text-stone-800 flex-1 break-words">{matrimonyForm.permanentAddress || "-"}</span>
                               </div>
