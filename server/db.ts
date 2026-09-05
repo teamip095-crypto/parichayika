@@ -1287,7 +1287,18 @@ function setupLocalTables(targetDb: any) {
 
 async function seedData() {
   try {
-    // 1. Seed Districts
+    // FIX: Check if seed has already been completed (via settings table flag).
+    // This prevents re-seeding after admin explicitly clears masters data.
+    // Once admin clears districts/sangathans/magazines from dashboard, they
+    // should NOT be auto-re-created on next cold start.
+    const seedFlag = await dbGet("SELECT value FROM settings WHERE key = 'seed_completed'");
+    if (seedFlag && seedFlag.value === "true") {
+      // Seed was already completed at least once. Do NOT re-seed even if tables are empty.
+      // Admin has full control — if they cleared data, respect that decision.
+      return;
+    }
+
+    // 1. Seed Districts (only on first-ever init)
     const districtsCheck = await dbGet("SELECT COUNT(*) as count FROM districts");
     if (!districtsCheck || Number(districtsCheck.count) === 0) {
       const dists = [
@@ -1400,6 +1411,23 @@ async function seedData() {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, ["CONF-000001", "रायपुर", "रायपुर साहू समाज", "परिचायिका", "2026", "विवाह", "3.5 × 2 inch", 3.5, 2, "inch", "Standard", 500, "enabled"]);
     }
+
+    // FIX: Set the 'seed_completed' flag so seedData never re-runs automatically.
+    // Admin has full control after this — if they delete masters data, it stays deleted.
+    try {
+      await dbRun("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = ?", ["seed_completed", "true", "true"]);
+    } catch {
+      // Fallback for SQLite (ON CONFLICT syntax differs)
+      try {
+        const existing = await dbGet("SELECT value FROM settings WHERE key = 'seed_completed'");
+        if (!existing) {
+          await dbRun("INSERT INTO settings (key, value) VALUES (?, ?)", ["seed_completed", "true"]);
+        } else {
+          await dbRun("UPDATE settings SET value = ? WHERE key = ?", ["true", "seed_completed"]);
+        }
+      } catch {}
+    }
+    console.log("[DB SEED] ✓ Seed completed and flag set. Admin now controls all masters data.");
   } catch (err) {
     console.error("Error during database seeding:", err);
   }
