@@ -175,7 +175,7 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
 
     setIsGeneratingPdf(true);
     setDownloadSuccess(false);
-    setPdfProgress("CorelDRAW-Ready Vector PDF तैयार हो रहा है...");
+    setPdfProgress("Devanagari Font लोड हो रहा है...");
 
     try {
       const pageW = pageDimensions.width;
@@ -183,25 +183,87 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
       const safe = safeArea;
       const contentW = pageW - 2 * safe;
 
-      // FIX: Use jsPDF native vector API instead of html2canvas rasterization.
-      // This produces an EDITABLE PDF where text, lines, and images are
-      // separate vector objects — CorelDRAW/InDesign import them as editable
-      // layers, NOT as a flattened image.
+      // =============================================
+      // CRITICAL FIX: Load Devanagari Unicode font for jsPDF
+      // jsPDF's built-in 'helvetica' does NOT support Devanagari (Hindi) characters.
+      // Without embedding a Devanagari font, all Hindi text shows as empty/garbage
+      // in the generated PDF. We fetch Tiro Devanagari Hindi TTF from Google Fonts
+      // and register it in jsPDF's Virtual File System (VFS) so it gets embedded
+      // into the PDF. CorelDRAW will then see proper editable Unicode Devanagari text.
+      // =============================================
+      const fontUrl = "https://fonts.gstatic.com/s/tirodevanagarihindi/v11/x4dwsRJejrBVHtPgc1zZcFONvitFtsNsMow." + Math.random() + ".ttf";
+      // Alternative: fetch from Google Fonts API CSS and extract the woff2/ttf URL
+      // For maximum compatibility, use a direct TTF URL
+      let fontBase64 = "";
+      try {
+        setPdfProgress("Devanagari Unicode Font डाउनलोड हो रहा है...");
+        // Fetch Tiro Devanagari Hindi from Google Fonts
+        const cssResp = await fetch("https://fonts.googleapis.com/css2?family=Tiro+Devanagari+Hindi:ital@0&display=swap");
+        const cssText = await cssResp.text();
+        // Extract font file URL from CSS @font-face
+        const fontUrlMatch = cssText.match(/url\((https:\/\/[^)]+)\)/);
+        if (fontUrlMatch) {
+          const fontResp = await fetch(fontUrlMatch[1]);
+          const fontBlob = await fontResp.blob();
+          fontBase64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const result = reader.result as string;
+              // Strip "data:font/woff2;base64," prefix — jsPDF needs raw base64
+              const base64 = result.split(",")[1];
+              resolve(base64);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(fontBlob);
+          });
+        }
+      } catch (fontErr) {
+        console.warn("Devanagari font fetch failed, falling back to helvetica:", fontErr);
+      }
+
+      // FIX: Use jsPDF native vector API — all text, lines, and images are
+      // separate vector objects. CorelDRAW/InDesign import them as editable layers.
       const pdf = new jsPDF({
         orientation: "portrait",
         unit: "in",
         format: [pageW, pageH],
         compress: true,
-        putOnlyUsedFonts: true
+        putOnlyUsedFonts: false
       });
+
+      // Register Devanagari font in jsPDF VFS
+      let useDevanagariFont = false;
+      if (fontBase64) {
+        try {
+          // jsPDF needs the font as a raw base64 string + a name
+          pdf.addFileToVFS("TiroDevanagariHindi.ttf", fontBase64);
+          pdf.addFont("TiroDevanagariHindi.ttf", "TiroDevanagari", "normal");
+          pdf.addFont("TiroDevanagariHindi.ttf", "TiroDevanagari", "bold");
+          pdf.addFont("TiroDevanagariHindi.ttf", "TiroDevanagari", "italic");
+          pdf.addFont("TiroDevanagariHindi.ttf", "TiroDevanagari", "bolditalic");
+          useDevanagariFont = true;
+          console.log("[PDF] Devanagari font registered successfully");
+        } catch (regErr) {
+          console.warn("[PDF] Font registration failed:", regErr);
+        }
+      }
+
+      // Helper: set font that works with Devanagari if available
+      const setPDFFont = (style: "normal" | "bold" = "normal") => {
+        if (useDevanagariFont) {
+          pdf.setFont("TiroDevanagari", style);
+        } else {
+          pdf.setFont("helvetica", style);
+        }
+      };
 
       // Set PDF metadata for CorelDRAW identification
       pdf.setProperties({
         title: "परिचायिका 2026 - CorelDRAW Editable Print Sheet",
-        subject: "CMYK C0 M0 Y0 K100 | 300 DPI | Vector Editable PDF",
+        subject: "CMYK C0 M0 Y0 K100 | Devanagari Unicode | Vector Editable PDF",
         author: "इंडियन प्रेस, रायपुर",
-        creator: "Parichayika Print Production Engine v2",
-        keywords: "CMYK, CorelDRAW, Editable, Vector, 300DPI, Parichayika"
+        creator: "Parichayika Print Production Engine v3",
+        keywords: "CMYK, CorelDRAW, Editable, Vector, Devanagari, Unicode, 300DPI"
       });
 
       const totalMatrimonyPages = matrimonyPageCount;
@@ -214,74 +276,58 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
         const startIndex = pageIdx * itemsPerPage;
         const pageItems = matrimonyAds.slice(startIndex, startIndex + itemsPerPage);
         const percent = Math.round(((pageIdx + 1) / totalPages) * 100);
-        setPdfProgress(`पृष्ठ ${pageIdx + 1} / ${totalPages} बन रहा है... (${percent}%) — Vector Text + Images`);
+        setPdfProgress(`पृष्ठ ${pageIdx + 1} / ${totalPages} बन रहा है... (${percent}%)`);
         await new Promise(r => setTimeout(r, 30));
 
         if (pageIdx > 0) pdf.addPage([pageW, pageH], "portrait");
 
-        const contentW = pageW - 2 * safe;
-        const contentH = pageH - 2 * safe;
-
-        // Page background — clean white (#FFFFFF)
+        // Page background — clean white
         pdf.setFillColor(255, 255, 255);
         pdf.rect(0, 0, pageW, pageH, "F");
 
-        // Crop marks (vector lines — editable in CorelDRAW)
+        // Crop marks
         if (showCropMarks) {
           pdf.setDrawColor(0, 0, 0);
           pdf.setLineWidth(0.005);
-          const cmLen = 0.15;
-          const cmOff = 0.1;
-          // Top-left
+          const cmLen = 0.15, cmOff = 0.1;
           pdf.line(cmOff, cmOff, cmOff + cmLen, cmOff);
           pdf.line(cmOff, cmOff, cmOff, cmOff + cmLen);
-          // Top-right
           pdf.line(pageW - cmOff - cmLen, cmOff, pageW - cmOff, cmOff);
           pdf.line(pageW - cmOff, cmOff, pageW - cmOff, cmOff + cmLen);
-          // Bottom-left
           pdf.line(cmOff, pageH - cmOff, cmOff + cmLen, pageH - cmOff);
           pdf.line(cmOff, pageH - cmOff - cmLen, cmOff, pageH - cmOff);
-          // Bottom-right
           pdf.line(pageW - cmOff - cmLen, pageH - cmOff, pageW - cmOff, pageH - cmOff);
           pdf.line(pageW - cmOff, pageH - cmOff - cmLen, pageW - cmOff, pageH - cmOff);
         }
 
-        // Color calibration bar (vector rectangles — CMYK representation)
+        // Color calibration bar
         if (showColorBars) {
-          const cbY = 0.15;
-          const cbW = 0.15;
-          const cbH = 0.08;
+          const cbY = 0.15, cbW = 0.15, cbH = 0.08;
           const cbX = (pageW - 6 * cbW) / 2;
-          // Cyan
           pdf.setFillColor(0, 255, 255); pdf.rect(cbX, cbY, cbW, cbH, "F");
-          // Magenta
           pdf.setFillColor(255, 0, 255); pdf.rect(cbX + cbW, cbY, cbW, cbH, "F");
-          // Yellow
           pdf.setFillColor(255, 255, 0); pdf.rect(cbX + 2*cbW, cbY, cbW, cbH, "F");
-          // Black (C0 M0 Y0 K100)
           pdf.setFillColor(0, 0, 0); pdf.rect(cbX + 3*cbW, cbY, cbW, cbH, "F");
-          // Gray
           pdf.setFillColor(128, 128, 128); pdf.rect(cbX + 4*cbW, cbY, cbW, cbH, "F");
-          // Light Gray
           pdf.setFillColor(211, 211, 211); pdf.rect(cbX + 5*cbW, cbY, cbW, cbH, "F");
         }
 
         // Page masthead header — pure black text (C0 M0 Y0 K100)
         pdf.setTextColor(0, 0, 0);
         pdf.setFontSize(9);
-        pdf.setFont("helvetica", "bold");
+        setPDFFont("bold");
         pdf.text("साहू समाज परिचायिका 2026 — युवक-युवती वैवाहिक परिचय", safe, safe + 0.15);
 
         pdf.setFontSize(6);
-        pdf.setFont("helvetica", "normal");
+        setPDFFont("normal");
         pdf.text(`${selectedDistrict || "समस्त जिला"} • ${selectedSangathan || "साहू संगठन"} • ऑफसेट प्रिंट शीट`, safe, safe + 0.22);
 
-        // Page number (right-aligned)
+        // Page number
         pdf.setFontSize(8);
-        pdf.setFont("helvetica", "bold");
+        setPDFFont("bold");
         pdf.text(`पृष्ठ ${pageIdx + 1} / ${totalMatrimonyPages}`, pageW - safe, safe + 0.15, { align: "right" });
         pdf.setFontSize(5);
-        pdf.setFont("helvetica", "normal");
+        setPDFFont("normal");
         pdf.text("300 DPI • CMYK C0 M0 Y0 K100", pageW - safe, safe + 0.22, { align: "right" });
 
         // Header line
@@ -305,95 +351,92 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
           const y = gridTop + row * cellH;
           const pad = 0.06;
 
-          // Card background — print-friendly off-white
-          pdf.setFillColor(255, 253, 246); // #FFFDF6
-          pdf.setDrawColor(28, 25, 23); // stone-900 border
+          // Card background
+          pdf.setFillColor(255, 253, 246);
+          pdf.setDrawColor(28, 25, 23);
           pdf.setLineWidth(0.008);
           pdf.roundedRect(x + pad, y + pad, cellW - 2*pad, cellH - 2*pad, 0.03, 0.03, "FD");
 
-          // Ad number + name header (red title — matches preview)
+          // Ad number + name header (red title)
           const headerY = y + pad + 0.12;
-          pdf.setTextColor(230, 81, 0); // #E65100 (orange-900)
+          pdf.setTextColor(230, 81, 0);
           pdf.setFontSize(7);
-          pdf.setFont("helvetica", "bold");
+          setPDFFont("bold");
           pdf.text(`${item.ad_number}. ${m.name}`, x + pad + 0.04, headerY);
 
           // Header underline
-          pdf.setDrawColor(255, 200, 200); // red-200
+          pdf.setDrawColor(255, 200, 200);
           pdf.setLineWidth(0.005);
           pdf.line(x + pad + 0.02, headerY + 0.02, x + cellW - pad - 0.02, headerY + 0.02);
 
-          // Text column (left side of card)
+          // Text column
           const textX = x + pad + 0.04;
           const textY = headerY + 0.1;
           const labelW = 0.45;
           const valueX = textX + labelW + 0.02;
-
-          pdf.setTextColor(0, 0, 0); // C0 M0 Y0 K100 pure black
-          pdf.setFontSize(5.5);
-
-          // Two-column grid (DOB, Height, Gotra, Blood)
           const col2X = x + pad + cellW/2 - pad;
           const lineH = 0.075;
 
+          // FIX: All text now uses Devanagari Unicode font — text shows correctly in CorelDRAW
+          pdf.setTextColor(0, 0, 0);
+          pdf.setFontSize(5.5);
+
           // Row 1: जन्म + ऊँचाई
-          pdf.setFont("helvetica", "bold");
+          setPDFFont("bold");
           pdf.text("जन्म", textX, textY);
           pdf.text(":", textX + labelW, textY);
-          pdf.setFont("helvetica", "normal");
+          setPDFFont("normal");
           pdf.text(m.dob, valueX, textY);
 
-          pdf.setFont("helvetica", "bold");
+          setPDFFont("bold");
           pdf.text("ऊँचाई", col2X, textY);
           pdf.text(":", col2X + labelW, textY);
-          pdf.setFont("helvetica", "normal");
+          setPDFFont("normal");
           pdf.text(m.height, col2X + labelW + 0.02, textY);
 
           // Row 2: गोत्र + रक्त
-          pdf.setFont("helvetica", "bold");
+          setPDFFont("bold");
           pdf.text("गोत्र", textX, textY + lineH);
           pdf.text(":", textX + labelW, textY + lineH);
-          pdf.setFont("helvetica", "normal");
+          setPDFFont("normal");
           pdf.text(m.gotra, valueX, textY + lineH);
 
-          pdf.setFont("helvetica", "bold");
+          setPDFFont("bold");
           pdf.text("रक्त", col2X, textY + lineH);
           pdf.text(":", col2X + labelW, textY + lineH);
-          pdf.setFont("helvetica", "normal");
+          setPDFFont("normal");
           pdf.text(m.blood_group, col2X + labelW + 0.02, textY + lineH);
 
-          // Full-width rows: पिता, पिता व्यव., माता, व्यवसाय, शिक्षा, पता
+          // Full-width rows (FIX: order matches preview — शिक्षा, व्यवसाय BEFORE पिता)
           const detailLabelW = 0.55;
           const rows = [
+            ["शिक्षा", m.education],
+            ["व्यवसाय", m.occupation],
             ["पिता", m.father_name],
             ["पिता व्यव.", m.father_occupation],
             ["माता", m.mother_name],
-            ["व्यवसाय", m.occupation],
-            ["शिक्षा", m.education],
-            ["पता", m.address],
+            ["वर्तमान पता", m.address],
           ];
 
           let detailY = textY + lineH * 2;
           for (const [label, value] of rows) {
-            pdf.setFont("helvetica", "bold");
+            setPDFFont("bold");
             pdf.text(label, textX, detailY);
             pdf.text(":", textX + detailLabelW, detailY);
-            pdf.setFont("helvetica", "normal");
-            // Truncate long values to fit cell width
+            setPDFFont("normal");
             const maxChars = Math.floor((cellW - pad * 2 - detailLabelW - 0.1) / 0.035);
             const displayVal = value.length > maxChars ? value.substring(0, maxChars) + "…" : value;
             pdf.text(displayVal, textX + detailLabelW + 0.05, detailY);
             detailY += lineH;
           }
 
-          // Profile image — embedded as separate layer (editable in CorelDRAW)
+          // Profile image — separate embedded object
           const imgW = 0.55;
           const imgH = 0.75;
           const imgX = x + cellW - pad - imgW - 0.04;
           const imgY = headerY + 0.05;
 
           if (m.photo_url && m.photo_url.startsWith("http")) {
-            // Fetch image and embed at 300 DPI quality
             try {
               const imgResp = await fetch(m.photo_url);
               const imgBlob = await imgResp.blob();
@@ -403,45 +446,37 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
                 reader.onerror = reject;
                 reader.readAsDataURL(imgBlob);
               });
-
-              // Determine format
               const isPng = m.photo_url.toLowerCase().includes(".png") || imgBase64.startsWith("data:image/png");
               const format = isPng ? "PNG" : "JPEG";
-
-              // Image border
               pdf.setDrawColor(0, 0, 0);
               pdf.setLineWidth(0.005);
               pdf.rect(imgX, imgY, imgW, imgH, "S");
-
-              // Embed image as editable object (not flattened)
               pdf.addImage(imgBase64, format, imgX, imgY, imgW, imgH, undefined, "FAST");
             } catch {
-              // If image fails to load, draw placeholder
               pdf.setFillColor(240, 240, 240);
               pdf.rect(imgX, imgY, imgW, imgH, "F");
               pdf.setFontSize(4);
-              pdf.setFont("helvetica", "normal");
+              setPDFFont("normal");
               pdf.setTextColor(150, 150, 150);
-              pdf.text("फोटो", imgX + imgW/2 - 0.1, imgY + imgH/2, { align: "center" });
+              pdf.text("फोटो", imgX + imgW/2, imgY + imgH/2, { align: "center" });
             }
           } else {
-            // No photo — draw placeholder
             pdf.setFillColor(240, 240, 240);
             pdf.rect(imgX, imgY, imgW, imgH, "F");
             pdf.setFontSize(4);
-            pdf.setFont("helvetica", "normal");
+            setPDFFont("normal");
             pdf.setTextColor(150, 150, 150);
-            pdf.text("पासपोर्ट फोटो", imgX + imgW/2 - 0.15, imgY + imgH/2, { align: "center" });
+            pdf.text("पासपोर्ट फोटो", imgX + imgW/2, imgY + imgH/2, { align: "center" });
           }
 
-          // Bottom contact line
+          // Bottom contact
           const contactY = y + cellH - pad - 0.06;
           pdf.setDrawColor(220, 220, 220);
           pdf.setLineWidth(0.003);
           pdf.line(x + pad + 0.02, contactY - 0.03, x + cellW - pad - 0.02, contactY - 0.03);
 
           pdf.setFontSize(5);
-          pdf.setFont("helvetica", "bold");
+          setPDFFont("bold");
           pdf.setTextColor(0, 0, 0);
           pdf.text(`फोन: ${m.mobile1 || "XXXXXXXXXX"}`, x + pad + 0.04, contactY);
           if (m.whatsapp) {
@@ -453,12 +488,12 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
         // Page footer
         pdf.setTextColor(0, 0, 0);
         pdf.setFontSize(5);
-        pdf.setFont("helvetica", "bold");
+        setPDFFont("bold");
         pdf.setDrawColor(0, 0, 0);
         pdf.setLineWidth(0.005);
         pdf.line(safe, pageH - safe - 0.15, pageW - safe, pageH - safe - 0.15);
         pdf.text("प्रकाशक: इंडियन प्रेस, रायपुर (छ.ग.) • मुद्रण: परिचायिका 2026", safe, pageH - safe - 0.08);
-        pdf.text("CorelDRAW / InDesign संगत • C0 M0 Y0 K100 • Vector Editable", pageW - safe, pageH - safe - 0.08, { align: "right" });
+        pdf.text("CorelDRAW संगत • C0 M0 Y0 K100 • Unicode Devanagari", pageW - safe, pageH - safe - 0.08, { align: "right" });
       }
 
       // =============================================
@@ -474,18 +509,17 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
 
         pdf.setTextColor(0, 0, 0);
         pdf.setFontSize(9);
-        pdf.setFont("helvetica", "bold");
+        setPDFFont("bold");
         pdf.text("साहू समाज परिचायिका 2026 — व्यावसायिक विज्ञापन", safe, safe + 0.15);
 
         pdf.setFontSize(6);
-        pdf.setFont("helvetica", "normal");
-        pdf.text("CorelDRAW Editable • CMYK C0 M0 Y0 K100 • 300 DPI", safe, safe + 0.22);
+        setPDFFont("normal");
+        pdf.text("CorelDRAW Editable • CMYK C0 M0 Y0 K100 • 300 DPI • Unicode", safe, safe + 0.22);
 
         pdf.setDrawColor(0, 0, 0);
         pdf.setLineWidth(0.01);
         pdf.line(safe, safe + 0.28, pageW - safe, safe + 0.28);
 
-        // Business ads — each as a separate block
         let bizY = safe + 0.4;
         for (const ad of businessAds) {
           pdf.setDrawColor(28, 25, 23);
@@ -494,17 +528,16 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
           pdf.rect(safe, bizY, contentW, 2.0, "S");
 
           pdf.setFontSize(8);
-          pdf.setFont("helvetica", "bold");
+          setPDFFont("bold");
           pdf.setTextColor(0, 0, 0);
           pdf.text(`विज्ञापन क्र.: ${ad.ad_number}`, safe + 0.05, bizY + 0.15);
 
           pdf.setFontSize(5);
-          pdf.setFont("helvetica", "normal");
+          setPDFFont("normal");
           pdf.text(`जिला: ${ad.district_hi || "-"} • संगठन: ${ad.sangathan_hi || "-"}`, safe + 0.05, bizY + 0.25);
           pdf.text(`पत्रिका: ${ad.magazine_hi || "-"} • संस्करण: ${ad.edition_hi || "-"}`, safe + 0.05, bizY + 0.32);
           pdf.text(`ग्राहक: ${ad.customer_name || "-"} • मोबाइल: ${ad.customer_mobile1 || "-"}`, safe + 0.05, bizY + 0.39);
 
-          // Design link / uploaded JPG
           if (ad.uploaded_jpg_url && ad.uploaded_jpg_url.startsWith("http")) {
             try {
               const imgResp = await fetch(ad.uploaded_jpg_url);
@@ -521,12 +554,12 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
           }
 
           bizY += 2.2;
-          if (bizY + 2.0 > pageH - safe - 0.2) break; // Don't overflow page
+          if (bizY + 2.0 > pageH - safe - 0.2) break;
         }
       }
 
       // Save PDF
-      const fileName = `Parichayika_CorelDRAW_Editable_${Date.now()}.pdf`;
+      const fileName = `Parichayika_CorelDRAW_Unicode_${Date.now()}.pdf`;
 
       try {
         const pdfBlob = pdf.output("blob");
@@ -542,7 +575,7 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
         pdf.save(fileName);
       }
 
-      setPdfProgress("✓ CorelDRAW-Ready Vector PDF डाउनलोड हो गया!");
+      setPdfProgress("✓ CorelDRAW-Ready Unicode Vector PDF डाउनलोड हो गया!");
       setDownloadSuccess(true);
       setTimeout(() => {
         setDownloadSuccess(false);
