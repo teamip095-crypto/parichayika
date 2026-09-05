@@ -332,15 +332,16 @@ export default function App() {
     editionId?: number | string,
     sizeCode?: string
   ): number => {
-    // FIX: PostgreSQL NUMERIC columns return price as string ("500" not 500).
-    // Convert to Number explicitly to prevent string concatenation in totals
-    // (was producing "0500.00" + "0500.00" = "0500.000500.00" bug).
+    // FIX: PostgreSQL NUMERIC columns return price as string; coerce to Number.
+    // FIX: When admin has NOT set a price, return 0 (NOT 500 fallback) —
+    // prevents false/fake pricing data from appearing. Admin must explicitly
+    // set prices in dashboard for rates to show.
     const toNum = (v: any): number => {
       const n = Number(v);
       return isNaN(n) || !isFinite(n) ? 0 : n;
     };
 
-    if (!districtId || !sangathanId) return 500;
+    if (!districtId || !sangathanId) return 0;
     const targetSize = sizeCode || "matrimony_standard";
     const match = masters.pricings?.find(
       (p) =>
@@ -365,7 +366,8 @@ export default function App() {
       (p) => p.adv_type_code === "matrimony" && p.adv_size_code === targetSize
     );
     if (def && toNum(def.price) > 0) return toNum(def.price);
-    return 500;
+    // FIX: Return 0 when no admin-set price exists (was returning 500 — fake default)
+    return 0;
   };
 
   const handleAddMatrimonyPublicationRow = () => {
@@ -409,8 +411,9 @@ export default function App() {
 
   // Helper to calculate rate per publication selection for business based on Admin Master Pricings
   const getBusinessPublicationRate = (sizeCode: string, districtId: number | string, sangathanId: number | string): number => {
-    // FIX: PostgreSQL NUMERIC returns price as string; coerce to Number to prevent
-    // "01000" / "03000" string-concat bugs in business cart totals.
+    // FIX: PostgreSQL NUMERIC returns price as string; coerce to Number.
+    // FIX: When admin has NOT set a price, return 0 (NOT hardcoded fallback) —
+    // admin must set prices explicitly in dashboard.
     const toNum = (v: any): number => {
       const n = Number(v);
       return isNaN(n) || !isFinite(n) ? 0 : n;
@@ -429,7 +432,8 @@ export default function App() {
       (p) => p.adv_type_code === "business" && p.adv_size_code === sizeCode
     );
     if (def) return toNum(def.price);
-    return sizeCode === "business_full" ? 5000 : sizeCode === "business_half" ? 3000 : 1500;
+    // FIX: Return 0 when no admin-set price exists (was returning 5000/3000/1500 — fake defaults)
+    return 0;
   };
 
   const handleBusinessJpgUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2576,6 +2580,20 @@ export default function App() {
                               </div>
                             </div>
 
+                            {/* FIX: Education + Occupation go RIGHT AFTER gotra/blood, BEFORE father — client spec */}
+                            <div className="space-y-1 pt-0.5">
+                              <div className="flex items-start min-w-0">
+                                <span className="w-12 text-stone-950 font-black shrink-0">शिक्षा</span>
+                                <span className="text-stone-400 mx-0.5 shrink-0">:</span>
+                                <span className="text-stone-800 break-words flex-1">{matrimonyForm.education || "-"}</span>
+                              </div>
+                              <div className="flex items-start min-w-0">
+                                <span className="w-12 text-stone-950 font-black shrink-0">व्यवसाय</span>
+                                <span className="text-stone-400 mx-0.5 shrink-0">:</span>
+                                <span className="text-stone-800 break-words flex-1">{matrimonyForm.occupation || "-"}</span>
+                              </div>
+                            </div>
+
                             <div className="space-y-1 pt-0.5">
                               <div className="flex items-start min-w-0">
                                 <span className="w-12 text-stone-950 font-black shrink-0">पिता</span>
@@ -2592,27 +2610,17 @@ export default function App() {
                                 <span className="text-stone-400 mx-0.5 shrink-0">:</span>
                                 <span className="text-stone-800 break-words flex-1">{matrimonyForm.mother_name || "-"}</span>
                               </div>
-                              {/* FIX: Order is now Mother → Education (Shiksha) → Occupation (Vyavasay), as client requested */}
-                              <div className="flex items-start min-w-0">
-                                <span className="w-12 text-stone-950 font-black shrink-0">शिक्षा</span>
-                                <span className="text-stone-400 mx-0.5 shrink-0">:</span>
-                                <span className="text-stone-800 break-words flex-1">{matrimonyForm.education || "-"}</span>
-                              </div>
-                              <div className="flex items-start min-w-0">
-                                <span className="w-12 text-stone-950 font-black shrink-0">व्यवसाय</span>
-                                <span className="text-stone-400 mx-0.5 shrink-0">:</span>
-                                <span className="text-stone-800 break-words flex-1">{matrimonyForm.occupation || "-"}</span>
-                              </div>
                             </div>
 
                             <div className="pt-1 border-t border-stone-200 space-y-1">
+                              {/* FIX: Changed "वि. पता" to "वर्तमान पता" per client request */}
                               <div className="flex items-start min-w-0">
-                                <span className="w-12 text-stone-950 font-black shrink-0">वि. पता</span>
+                                <span className="w-12 text-stone-950 font-black shrink-0">वर्तमान</span>
                                 <span className="text-stone-400 mx-0.5 shrink-0">:</span>
                                 <span className="text-stone-800 flex-1 break-words">{matrimonyForm.currentAddress || "-"}</span>
                               </div>
                               <div className="flex items-start min-w-0">
-                                <span className="w-12 text-stone-950 font-black shrink-0">स्था. पता</span>
+                                <span className="w-12 text-stone-950 font-black shrink-0">स्थायी</span>
                                 <span className="text-stone-400 mx-0.5 shrink-0">:</span>
                                 <span className="text-stone-800 flex-1 break-words">{matrimonyForm.permanentAddress || "-"}</span>
                               </div>
