@@ -38,7 +38,8 @@ import {
   Check,
   ExternalLink,
   Layers,
-  ArrowRight
+  ArrowRight,
+  Pencil
 } from "lucide-react";
 import TransliteratedInput from "./components/TransliteratedInput";
 import DateOfBirthInput from "./components/DateOfBirthInput";
@@ -331,6 +332,14 @@ export default function App() {
     editionId?: number | string,
     sizeCode?: string
   ): number => {
+    // FIX: PostgreSQL NUMERIC columns return price as string ("500" not 500).
+    // Convert to Number explicitly to prevent string concatenation in totals
+    // (was producing "0500.00" + "0500.00" = "0500.000500.00" bug).
+    const toNum = (v: any): number => {
+      const n = Number(v);
+      return isNaN(n) || !isFinite(n) ? 0 : n;
+    };
+
     if (!districtId || !sangathanId) return 500;
     const targetSize = sizeCode || "matrimony_standard";
     const match = masters.pricings?.find(
@@ -342,7 +351,7 @@ export default function App() {
         (!magazineId || p.magazine_id === Number(magazineId)) &&
         (!editionId || p.edition_id === Number(editionId))
     );
-    if (match && match.price > 0) return match.price;
+    if (match && toNum(match.price) > 0) return toNum(match.price);
 
     const matchDistSang = masters.pricings?.find(
       (p) =>
@@ -350,12 +359,12 @@ export default function App() {
         p.district_id === Number(districtId) &&
         p.sangathan_id === Number(sangathanId)
     );
-    if (matchDistSang && matchDistSang.price > 0) return matchDistSang.price;
+    if (matchDistSang && toNum(matchDistSang.price) > 0) return toNum(matchDistSang.price);
 
     const def = masters.pricings?.find(
       (p) => p.adv_type_code === "matrimony" && p.adv_size_code === targetSize
     );
-    if (def && def.price > 0) return def.price;
+    if (def && toNum(def.price) > 0) return toNum(def.price);
     return 500;
   };
 
@@ -399,7 +408,14 @@ export default function App() {
   };
 
   // Helper to calculate rate per publication selection for business based on Admin Master Pricings
-  const getBusinessPublicationRate = (sizeCode: string, districtId: number | string, sangathanId: number | string) => {
+  const getBusinessPublicationRate = (sizeCode: string, districtId: number | string, sangathanId: number | string): number => {
+    // FIX: PostgreSQL NUMERIC returns price as string; coerce to Number to prevent
+    // "01000" / "03000" string-concat bugs in business cart totals.
+    const toNum = (v: any): number => {
+      const n = Number(v);
+      return isNaN(n) || !isFinite(n) ? 0 : n;
+    };
+
     if (!districtId || !sangathanId) return 0;
     const match = masters.pricings?.find(
       (p) =>
@@ -408,11 +424,11 @@ export default function App() {
         p.district_id === Number(districtId) &&
         p.sangathan_id === Number(sangathanId)
     );
-    if (match) return match.price;
+    if (match) return toNum(match.price);
     const def = masters.pricings?.find(
       (p) => p.adv_type_code === "business" && p.adv_size_code === sizeCode
     );
-    if (def) return def.price;
+    if (def) return toNum(def.price);
     return sizeCode === "business_full" ? 5000 : sizeCode === "business_half" ? 3000 : 1500;
   };
 
@@ -1715,7 +1731,9 @@ export default function App() {
   };
 
   const getCartTotal = () => {
-    return cart.reduce((sum, item) => sum + item.price, 0);
+    // FIX: PostgreSQL returns price as string — coerce each price to Number
+    // to prevent string concat like "0500.000500.00" in cart total.
+    return cart.reduce((sum, item) => sum + Number(item.price || 0), 0);
   };
 
   return (
@@ -2533,7 +2551,8 @@ export default function App() {
 
                         {/* Details Grid & Image */}
                         <div className="flex flex-row gap-2.5 items-start">
-                          <div className="flex-1 min-w-0 font-sans space-y-1 text-[9px] leading-[13px] text-stone-900 font-bold">
+                          {/* FIX: Increased font size from 9px to 11px and added font-extrabold for bolder preview text */}
+                          <div className="flex-1 min-w-0 font-sans space-y-1 text-[11px] leading-[15px] text-stone-900 font-extrabold">
                             <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-left">
                               <div className="flex items-center min-w-0">
                                 <span className="w-9 text-stone-950 font-black shrink-0">जन्म</span>
@@ -2573,23 +2592,29 @@ export default function App() {
                                 <span className="text-stone-400 mx-0.5 shrink-0">:</span>
                                 <span className="text-stone-800 break-words flex-1">{matrimonyForm.mother_name || "-"}</span>
                               </div>
+                              {/* FIX: Order is now Mother → Education (Shiksha) → Occupation (Vyavasay), as client requested */}
+                              <div className="flex items-start min-w-0">
+                                <span className="w-12 text-stone-950 font-black shrink-0">शिक्षा</span>
+                                <span className="text-stone-400 mx-0.5 shrink-0">:</span>
+                                <span className="text-stone-800 break-words flex-1">{matrimonyForm.education || "-"}</span>
+                              </div>
                               <div className="flex items-start min-w-0">
                                 <span className="w-12 text-stone-950 font-black shrink-0">व्यवसाय</span>
                                 <span className="text-stone-400 mx-0.5 shrink-0">:</span>
                                 <span className="text-stone-800 break-words flex-1">{matrimonyForm.occupation || "-"}</span>
                               </div>
                             </div>
-                            
+
                             <div className="pt-1 border-t border-stone-200 space-y-1">
                               <div className="flex items-start min-w-0">
-                                <span className="w-12 text-stone-950 font-black shrink-0">शिक्षा</span>
+                                <span className="w-12 text-stone-950 font-black shrink-0">वि. पता</span>
                                 <span className="text-stone-400 mx-0.5 shrink-0">:</span>
-                                <span className="text-stone-800 flex-1 break-words">{matrimonyForm.education || "-"}</span>
+                                <span className="text-stone-800 flex-1 break-words">{matrimonyForm.currentAddress || "-"}</span>
                               </div>
                               <div className="flex items-start min-w-0">
-                                <span className="w-12 text-stone-950 font-black shrink-0">पता</span>
+                                <span className="w-12 text-stone-950 font-black shrink-0">स्था. पता</span>
                                 <span className="text-stone-400 mx-0.5 shrink-0">:</span>
-                                <span className="text-stone-800 flex-1 break-words">{matrimonyForm.currentAddress || matrimonyForm.permanentAddress || "-"}</span>
+                                <span className="text-stone-800 flex-1 break-words">{matrimonyForm.permanentAddress || "-"}</span>
                               </div>
                             </div>
                           </div>
@@ -2608,7 +2633,8 @@ export default function App() {
                         </div>
 
                         {/* Bottom Contact */}
-                        <div className="mt-2 pt-1.5 border-t border-stone-200 flex items-center justify-between text-[8.5px] font-bold text-stone-900">
+                        {/* FIX: Increased font size from 8.5px to 10px for bolder preview */}
+                        <div className="mt-2 pt-1.5 border-t border-stone-200 flex items-center justify-between text-[10px] font-extrabold text-stone-900">
                           <div className="flex items-center gap-1">
                             <Phone className="w-2.5 h-2.5 text-[#E65100]" />
                             {!matrimonyForm.mobile1 ? (
@@ -3091,7 +3117,7 @@ export default function App() {
                   <div className="pt-4 border-t border-stone-200/60 mt-3 flex items-center justify-between">
                     <span className="text-xs text-stone-500 font-semibold">मूल्य लगभग:</span>
                     <span className="text-lg font-black text-emerald-800 font-mono">
-                      ₹{(masters.pricings?.find(p => p.adv_size_code === "business_full")?.price || 5000).toLocaleString("en-IN")}
+                      ₹{Number(masters.pricings?.find(p => p.adv_size_code === "business_full")?.price || 5000).toLocaleString("en-IN")}
                     </span>
                   </div>
                 </div>
@@ -3123,7 +3149,7 @@ export default function App() {
                   <div className="pt-4 border-t border-stone-200/60 mt-3 flex items-center justify-between">
                     <span className="text-xs text-stone-500 font-semibold">मूल्य लगभग:</span>
                     <span className="text-lg font-black text-teal-800 font-mono">
-                      ₹{(masters.pricings?.find(p => p.adv_size_code === "business_half")?.price || 3000).toLocaleString("en-IN")}
+                      ₹{Number(masters.pricings?.find(p => p.adv_size_code === "business_half")?.price || 3000).toLocaleString("en-IN")}
                     </span>
                   </div>
                 </div>
@@ -3155,7 +3181,7 @@ export default function App() {
                   <div className="pt-4 border-t border-stone-200/60 mt-3 flex items-center justify-between">
                     <span className="text-xs text-stone-500 font-semibold">मूल्य लगभग:</span>
                     <span className="text-lg font-black text-slate-800 font-mono">
-                      ₹{(masters.pricings?.find(p => p.adv_size_code === "business_quarter")?.price || 1500).toLocaleString("en-IN")}
+                      ₹{Number(masters.pricings?.find(p => p.adv_size_code === "business_quarter")?.price || 1500).toLocaleString("en-IN")}
                     </span>
                   </div>
                 </div>
@@ -3558,9 +3584,17 @@ export default function App() {
                       <div className="text-right flex items-center justify-between sm:justify-end w-full sm:w-auto gap-4 border-t sm:border-t-0 pt-2 sm:pt-0">
                         <div>
                           <p className="text-xs text-stone-400 font-semibold">दर (Price)</p>
-                          <p className="text-lg font-mono font-black text-stone-900">₹{item.price}</p>
+                          <p className="text-lg font-mono font-black text-stone-900">₹{Number(item.price).toLocaleString("en-IN")}/-</p>
                         </div>
                         <div className="flex items-center gap-2">
+                          {/* FIX: Added "Edit/Back" button so user can go back to form and fix details */}
+                          <button
+                            onClick={() => handleEditCartItem(item)}
+                            className="p-2 bg-sky-50 hover:bg-sky-100 text-sky-700 rounded-lg border border-sky-200 transition-colors cursor-pointer"
+                            title="विवरण संपादित करें (Edit Details)"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
                           <button
                             onClick={() => handleRemoveCartItem(item.id)}
                             className="p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg border border-red-100 transition-colors cursor-pointer"
@@ -3600,7 +3634,8 @@ export default function App() {
                     </div>
                     <div className="flex justify-between border-t pt-2 text-stone-900 font-bold">
                       <span>कुल देय राशि:</span>
-                      <span className="text-lg font-black text-[#E65100] font-mono">₹{getCartTotal().toLocaleString("en-IN")}.00</span>
+                      {/* FIX: Format as ₹500/- (whole rupee), not ₹0500.00 — client spec */}
+                      <span className="text-lg font-black text-[#E65100] font-mono">₹{getCartTotal().toLocaleString("en-IN")}/-</span>
                     </div>
                   </div>
 
