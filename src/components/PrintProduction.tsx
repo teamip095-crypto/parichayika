@@ -123,6 +123,212 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
   // =============================================
   // PDF GENERATION: Vector text + embedded Devanagari font + CMYK-safe colors
   // =============================================
+  // Generate SVG file with exact preview layout — CorelDRAW imports SVG natively
+  // All text remains editable text, shapes remain vector, images remain separate objects
+  const handleDownloadSVG = async () => {
+    if (eligibleAds.length === 0) {
+      alert("डाउनलोड करने के लिए कोई विज्ञापन उपलब्ध नहीं है।");
+      return;
+    }
+  
+    setIsGeneratingPdf(true);
+    setDownloadSuccess(false);
+    setPdfProgress("CorelDRAW SVG फ़ाइल तैयार हो रहा है...");
+  
+    try {
+      const pageW = pageDimensions.width;
+      const pageH = pageDimensions.height;
+      const safe = safeArea;
+      // Convert inches to points (1 inch = 72 points) for SVG
+      const ptW = pageW * 72;
+      const ptH = pageH * 72;
+      const ptSafe = safe * 72;
+  
+      let svgContent = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+      svgContent += `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" `;
+      svgContent += `width="${ptW}" height="${ptH}" viewBox="0 0 ${ptW} ${ptH}" `;
+      svgContent += `style="background-color:#FFFFFF">\n`;
+      svgContent += `<!-- Parichayika 2026 - CorelDRAW Editable SVG Print Sheet -->\n`;
+      svgContent += `<!-- Font: Tiro Devanagari Hindi | CMYK: C0 M0 Y0 K100 | 300 DPI -->\n\n`;
+  
+      // Page background
+      svgContent += `<rect x="0" y="0" width="${ptW}" height="${ptH}" fill="#FFFFFF"/>\n`;
+  
+      const totalMatrimonyPages = matrimonyPageCount;
+      const totalPages = totalMatrimonyPages + (businessAds.length > 0 ? 1 : 0);
+  
+      for (let pageIdx = 0; pageIdx < totalMatrimonyPages; pageIdx++) {
+        const startIndex = pageIdx * itemsPerPage;
+        const pageItems = matrimonyAds.slice(startIndex, startIndex + itemsPerPage);
+        const percent = Math.round(((pageIdx + 1) / totalPages) * 100);
+        setPdfProgress(`SVG पृष्ठ ${pageIdx + 1} / ${totalPages} बन रहा है... (${percent}%)`);
+        await new Promise(r => setTimeout(r, 30));
+  
+        if (pageIdx > 0) {
+          svgContent += `\n<!-- === PAGE ${pageIdx + 1} === -->\n`;
+          svgContent += `<rect x="0" y="0" width="${ptW}" height="${ptH}" fill="#FFFFFF"/>\n`;
+        }
+  
+        // Crop marks
+        if (showCropMarks) {
+          const cmLen = 0.15 * 72, cmOff = 0.1 * 72;
+          svgContent += `<line x1="${cmOff}" y1="${cmOff}" x2="${cmOff + cmLen}" y2="${cmOff}" stroke="#000000" stroke-width="0.5"/>\n`;
+          svgContent += `<line x1="${cmOff}" y1="${cmOff}" x2="${cmOff}" y2="${cmOff + cmLen}" stroke="#000000" stroke-width="0.5"/>\n`;
+          svgContent += `<line x1="${ptW - cmOff - cmLen}" y1="${cmOff}" x2="${ptW - cmOff}" y2="${cmOff}" stroke="#000000" stroke-width="0.5"/>\n`;
+          svgContent += `<line x1="${ptW - cmOff}" y1="${cmOff}" x2="${ptW - cmOff}" y2="${cmOff + cmLen}" stroke="#000000" stroke-width="0.5"/>\n`;
+          svgContent += `<line x1="${cmOff}" y1="${ptH - cmOff}" x2="${cmOff + cmLen}" y2="${ptH - cmOff}" stroke="#000000" stroke-width="0.5"/>\n`;
+          svgContent += `<line x1="${cmOff}" y1="${ptH - cmOff - cmLen}" x2="${cmOff}" y2="${ptH - cmOff}" stroke="#000000" stroke-width="0.5"/>\n`;
+          svgContent += `<line x1="${ptW - cmOff - cmLen}" y1="${ptH - cmOff}" x2="${ptW - cmOff}" y2="${ptH - cmOff}" stroke="#000000" stroke-width="0.5"/>\n`;
+          svgContent += `<line x1="${ptW - cmOff}" y1="${ptH - cmOff - cmLen}" x2="${ptW - cmOff}" y2="${ptH - cmOff}" stroke="#000000" stroke-width="0.5"/>\n`;
+        }
+  
+        // Header
+        const hdrY = ptSafe + 10;
+        svgContent += `<text x="${ptSafe}" y="${hdrY}" font-family="'Tiro Devanagari Hindi', 'Noto Sans Devanagari', sans-serif" font-size="9" font-weight="bold" fill="#000000">साहू समाज परिचायिका 2026 — युवक-युवती वैवाहिक परिचय</text>\n`;
+        svgContent += `<text x="${ptSafe}" y="${hdrY + 7}" font-family="'Tiro Devanagari Hindi', sans-serif" font-size="6" fill="#333333">${selectedDistrict || "समस्त जिला"} • ${selectedSangathan || "साहू संगठन"} • ऑफसेट प्रिंट शीट</text>\n`;
+        svgContent += `<text x="${ptW - ptSafe}" y="${hdrY}" font-family="monospace" font-size="8" font-weight="bold" fill="#000000" text-anchor="end">पृष्ठ ${pageIdx + 1} / ${totalMatrimonyPages}</text>\n`;
+        svgContent += `<text x="${ptW - ptSafe}" y="${hdrY + 7}" font-family="monospace" font-size="5" fill="#666666" text-anchor="end">300 DPI • CMYK C0 M0 Y0 K100</text>\n`;
+        svgContent += `<line x1="${ptSafe}" y1="${hdrY + 14}" x2="${ptW - ptSafe}" y2="${hdrY + 14}" stroke="#000000" stroke-width="0.5"/>\n`;
+  
+        // Grid
+        const gridTop = hdrY + 20;
+        const gridH = ptH - ptSafe - gridTop - 30;
+        const gridW = ptW - 2 * ptSafe;
+        const cellW = gridW / columns;
+        const cellH = gridH / rows;
+  
+        for (let idx = 0; idx < pageItems.length; idx++) {
+          const item = pageItems[idx];
+          const m = getMatrimonyData(item);
+          const col = idx % columns;
+          const row = Math.floor(idx / columns);
+          const x = ptSafe + col * cellW;
+          const y = gridTop + row * cellH;
+          const pad = 4;
+  
+          // Card background
+          svgContent += `<rect x="${x + pad}" y="${y + pad}" width="${cellW - 2*pad}" height="${cellH - 2*pad}" rx="2" ry="2" fill="#FFFDF6" stroke="#000000" stroke-width="0.5"/>\n`;
+  
+          // Ad number + name (red)
+          const hY = y + pad + 8;
+          svgContent += `<text x="${x + pad + 3}" y="${hY}" font-family="'Tiro Devanagari Hindi', sans-serif" font-size="7" font-weight="bold" fill="#ED1C24">${item.ad_number}. ${m.name}</text>\n`;
+          svgContent += `<line x1="${x + pad + 2}" y1="${hY + 2}" x2="${x + cellW - pad - 2}" y2="${hY + 2}" stroke="#FFC8C8" stroke-width="0.3"/>\n`;
+  
+          // Text fields — all editable <text> elements
+          const tx = x + pad + 3;
+          const ty = hY + 7;
+          const lh = 5.5;
+          const col2x = x + pad + cellW/2 - pad;
+  
+          // Row 1: जन्म + ऊँचाई
+          svgContent += `<text x="${tx}" y="${ty}" font-family="'Tiro Devanagari Hindi', sans-serif" font-size="5.5" font-weight="bold" fill="#000000">जन्म:</text>\n`;
+          svgContent += `<text x="${tx + 22}" y="${ty}" font-family="'Tiro Devanagari Hindi', sans-serif" font-size="5.5" fill="#333333">${m.dob}</text>\n`;
+          svgContent += `<text x="${col2x}" y="${ty}" font-family="'Tiro Devanagari Hindi', sans-serif" font-size="5.5" font-weight="bold" fill="#000000">ऊँचाई:</text>\n`;
+          svgContent += `<text x="${col2x + 22}" y="${ty}" font-family="'Tiro Devanagari Hindi', sans-serif" font-size="5.5" fill="#333333">${m.height}</text>\n`;
+  
+          // Row 2: गोत्र + रक्त
+          svgContent += `<text x="${tx}" y="${ty + lh}" font-family="'Tiro Devanagari Hindi', sans-serif" font-size="5.5" font-weight="bold" fill="#000000">गोत्र:</text>\n`;
+          svgContent += `<text x="${tx + 22}" y="${ty + lh}" font-family="'Tiro Devanagari Hindi', sans-serif" font-size="5.5" fill="#333333">${m.gotra}</text>\n`;
+          svgContent += `<text x="${col2x}" y="${ty + lh}" font-family="'Tiro Devanagari Hindi', sans-serif" font-size="5.5" font-weight="bold" fill="#000000">रक्त:</text>\n`;
+          svgContent += `<text x="${col2x + 22}" y="${ty + lh}" font-family="'Tiro Devanagari Hindi', sans-serif" font-size="5.5" fill="#333333">${m.blood_group}</text>\n`;
+  
+          // Full-width rows (matching preview order)
+          const rows = [
+            ["शिक्षा:", m.education],
+            ["व्यवसाय:", m.occupation],
+            ["पिता:", m.father_name],
+            ["पिता व्यव.:", m.father_occupation],
+            ["माता:", m.mother_name],
+            ["वर्तमान पता:", m.currentAddress],
+            ["स्थायी पता:", m.permanentAddress],
+          ];
+  
+          let dy = ty + lh * 2;
+          for (const [label, value] of rows) {
+            svgContent += `<text x="${tx}" y="${dy}" font-family="'Tiro Devanagari Hindi', sans-serif" font-size="5.5" font-weight="bold" fill="#000000">${label}</text>\n`;
+            svgContent += `<text x="${tx + 28}" y="${dy}" font-family="'Tiro Devanagari Hindi', sans-serif" font-size="5.5" fill="#333333">${value.length > 30 ? value.substring(0, 30) + '…' : value}</text>\n`;
+            dy += lh;
+          }
+  
+          // Photo — fetch and embed as base64
+          const imgW = 40, imgH = 54;
+          const imgX = x + cellW - pad - imgW - 3;
+          const imgY = hY + 3;
+  
+          if (m.photo_url && m.photo_url.startsWith("http")) {
+            try {
+              setPdfProgress(`SVG: फोटो कन्वर्ट हो रहा है... (${idx + 1}/${pageItems.length})`);
+              // Try CMYK conversion first
+              const cmykResp = await fetch("/api/cmyk-convert", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ imageUrl: m.photo_url })
+              });
+  
+              let imgData: string;
+              if (cmykResp.ok) {
+                const cmykData = await cmykResp.json();
+                imgData = cmykData.cmykImage || "";
+              } else {
+                const imgResp = await fetch(m.photo_url);
+                const imgBlob = await imgResp.blob();
+                imgData = await new Promise<string>((resolve, reject) => {
+                  const reader = new FileReader();
+                  reader.onload = () => resolve(reader.result as string);
+                  reader.onerror = reject;
+                  reader.readAsDataURL(imgBlob);
+                });
+              }
+  
+              svgContent += `<rect x="${imgX}" y="${imgY}" width="${imgW}" height="${imgH}" fill="none" stroke="#000000" stroke-width="0.3"/>\n`;
+              svgContent += `<image x="${imgX}" y="${imgY}" width="${imgW}" height="${imgH}" xlink:href="${imgData}" preserveAspectRatio="xMidYMid slice"/>\n`;
+            } catch {
+              svgContent += `<rect x="${imgX}" y="${imgY}" width="${imgW}" height="${imgH}" fill="#F0F0F0" stroke="#999999" stroke-width="0.3"/>\n`;
+              svgContent += `<text x="${imgX + imgW/2}" y="${imgY + imgH/2}" font-family="sans-serif" font-size="4" fill="#999999" text-anchor="middle">फोटो</text>\n`;
+            }
+          } else {
+            svgContent += `<rect x="${imgX}" y="${imgY}" width="${imgW}" height="${imgH}" fill="#F0F0F0" stroke="#999999" stroke-width="0.3"/>\n`;
+            svgContent += `<text x="${imgX + imgW/2}" y="${imgY + imgH/2}" font-family="sans-serif" font-size="4" fill="#999999" text-anchor="middle">पासपोर्ट फोटो</text>\n`;
+          }
+  
+          // Contact line
+          const cY = y + cellH - pad - 4;
+          svgContent += `<line x1="${x + pad + 2}" y1="${cY - 2}" x2="${x + cellW - pad - 2}" y2="${cY - 2}" stroke="#CCCCCC" stroke-width="0.2"/>\n`;
+          svgContent += `<text x="${x + pad + 3}" y="${cY}" font-family="monospace" font-size="5" font-weight="bold" fill="#000000">फोन: ${m.mobile1 || "XXXXXXXXXX"}</text>\n`;
+          if (m.whatsapp) {
+            svgContent += `<text x="${x + cellW - pad - 3}" y="${cY}" font-family="monospace" font-size="5" font-weight="bold" fill="#00B050" text-anchor="end">व्हाट्सएप: ${m.whatsapp}</text>\n`;
+          }
+        }
+  
+        // Footer
+        svgContent += `<line x1="${ptSafe}" y1="${ptH - ptSafe - 11}" x2="${ptW - ptSafe}" y2="${ptH - ptSafe - 11}" stroke="#000000" stroke-width="0.3"/>\n`;
+        svgContent += `<text x="${ptSafe}" y="${ptH - ptSafe - 5}" font-family="'Tiro Devanagari Hindi', sans-serif" font-size="5" font-weight="bold" fill="#000000">प्रकाशक: इंडियन प्रेस, रायपुर (छ.ग.) • मुद्रण: परिचायिका 2026</text>\n`;
+        svgContent += `<text x="${ptW - ptSafe}" y="${ptH - ptSafe - 5}" font-family="monospace" font-size="5" font-weight="bold" fill="#000000" text-anchor="end">CorelDRAW SVG • C0 M0 Y0 K100 • Unicode Devanagari</text>\n`;
+      }
+  
+      svgContent += `</svg>`;
+  
+      // Download SVG
+      const fileName = `Parichayika_CorelDRAW_${Date.now()}.svg`;
+      const blob = new Blob([svgContent], { type: "image/svg+xml" });
+      const blobUrl = URL.createObjectURL(blob);
+      const downloadLink = document.createElement("a");
+      downloadLink.href = blobUrl;
+      downloadLink.download = fileName;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+  
+      setPdfProgress("✓ CorelDRAW SVG फ़ाइल डाउनलोड हो गया!");
+      setDownloadSuccess(true);
+      setTimeout(() => { setDownloadSuccess(false); setPdfProgress(""); }, 4000);
+    } catch (err: any) {
+      console.error("SVG generation error:", err);
+      alert(`SVG बनाने में त्रुटि: ${err.message || "अज्ञात त्रुटि"}`);
+      setPdfProgress("");
+  } finally { setIsGeneratingPdf(false); }
+};
   const handleDownloadCorelDrawPdf = async () => {
     if (eligibleAds.length === 0) {
       alert("डाउनलोड करने के लिए कोई विज्ञापन उपलब्ध नहीं है।");
@@ -538,11 +744,17 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
+            <button type="button" onClick={handleDownloadSVG} disabled={isGeneratingPdf || eligibleAds.length === 0}
+              className="w-full lg:w-auto px-6 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-stone-300 text-white text-xs font-black rounded-xl flex items-center justify-center gap-2 shadow-md hover:shadow-lg cursor-pointer transition-all active:scale-95">
+              {isGeneratingPdf ? (<><Loader2 className="w-4 h-4 animate-spin" /><span>SVG बन रहा है...</span></>)
+              : downloadSuccess ? (<><Check className="w-4 h-4 text-white" /><span>SVG डाउनलोड हो गया!</span></>)
+              : (<><Download className="w-4 h-4" /><span>📥 CorelDRAW SVG डाउनलोड करें</span></>)}
+            </button>
             <button type="button" onClick={handleDownloadCorelDrawPdf} disabled={isGeneratingPdf || eligibleAds.length === 0}
               className="w-full lg:w-auto px-6 py-3 bg-orange-600 hover:bg-orange-700 disabled:bg-stone-300 text-white text-xs font-black rounded-xl flex items-center justify-center gap-2 shadow-md hover:shadow-lg cursor-pointer transition-all active:scale-95">
               {isGeneratingPdf ? (<><Loader2 className="w-4 h-4 animate-spin" /><span>PDF बन रहा है...</span></>)
               : downloadSuccess ? (<><Check className="w-4 h-4 text-white" /><span>PDF डाउनलोड हो गया!</span></>)
-              : (<><Download className="w-4 h-4" /><span>📥 कोरल्ड्रॉ / प्रिंट PDF डाउनलोड करें</span></>)}
+              : (<><Download className="w-4 h-4" /><span>📥 CMYK PDF डाउनलोड करें</span></>)}
             </button>
           </div>
         </div>
