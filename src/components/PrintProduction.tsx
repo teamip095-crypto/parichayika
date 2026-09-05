@@ -171,15 +171,27 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
         } catch (regErr) { console.warn("[PDF] Font registration failed:", regErr); }
       }
 
-      // CMYK color constants (stored as RGB equivalents — pure black = C0 M0 Y0 K100)
-      const CMYK_BLACK = [0, 0, 0];           // C0 M0 Y0 K100
-      const CMYK_RED = [237, 28, 36];         // C0 M100 Y100 K0
-      const CMYK_GREEN = [0, 176, 80];        // C100 M0 Y100 K0
-      const CMYK_GRAY = [128, 128, 128];      // C0 M0 Y0 K50
-      const CMYK_LIGHT_GRAY = [240, 240, 240];
-      const CMYK_OFF_WHITE = [255, 253, 246];
-      const CMYK_WHITE = [255, 255, 255];
+      // =============================================
+      // TRUE CMYK COLOR SYSTEM — jsPDF supports 4-arg CMYK directly
+      // setFillColor(c,m,y,k) / setTextColor(c,m,y,k) / setDrawColor(c,m,y,k)
+      // with 4 args, jsPDF outputs DeviceCMYK color space in the PDF.
+      // Values must be 0.00-1.00 (fractional) or "0"-"255" (integer).
+      // We use 0-255 integer range for clarity.
+      // =============================================
 
+      // TRUE CMYK swatches (C,M,Y,K each 0-255 where 255=100%)
+      const CMYK_BLACK_T  = [0, 0, 0, 255];       // C0 M0 Y0 K100 — pure fine black text
+      const CMYK_RED_T     = [0, 255, 255, 0];    // C0 M100 Y100 K0 — ad number red
+      const CMYK_GREEN_T   = [255, 0, 255, 0];    // C100 M0 Y100 K0 — WhatsApp green
+      const CMYK_GRAY_T    = [0, 0, 0, 128];      // C0 M0 Y0 K50 — placeholders
+      const CMYK_LGRAY_T   = [0, 0, 0, 15];       // C0 M0 Y0 K6 — light gray bg
+      const CMYK_OFFWHITE_T = [0, 0, 0, 3];       // Near-white
+      const CMYK_WHITE_T  = [0, 0, 0, 0];         // C0 M0 Y0 K0 — white
+      const CMYK_CYAN_T    = [255, 0, 0, 0];      // C100 M0 Y0 K0
+      const CMYK_MAGENTA_T = [0, 255, 0, 0];      // C0 M100 Y0 K0
+      const CMYK_YELLOW_T  = [0, 0, 255, 0];      // C0 M0 Y100 K0
+
+      // Helper: set font that works with Devanagari if available
       const setPDFFont = (style: "normal" | "bold" = "normal") => {
         pdf.setFont(useDevanagariFont ? "TiroDevanagari" : "helvetica", style);
       };
@@ -204,11 +216,11 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
 
         if (pageIdx > 0) pdf.addPage([pageW, pageH], "portrait");
 
-        pdf.setFillColor(CMYK_WHITE[0], CMYK_WHITE[1], CMYK_WHITE[2]);
+        pdf.setFillColor(CMYK_WHITE_T[0], CMYK_WHITE_T[1], CMYK_WHITE_T[2], CMYK_WHITE_T[3]);
         pdf.rect(0, 0, pageW, pageH, "F");
 
         if (showCropMarks) {
-          pdf.setDrawColor(CMYK_BLACK[0], CMYK_BLACK[1], CMYK_BLACK[2]);
+          pdf.setDrawColor(CMYK_BLACK_T[0], CMYK_BLACK_T[1], CMYK_BLACK_T[2], CMYK_BLACK_T[3]);
           pdf.setLineWidth(0.005);
           const cmLen = 0.15, cmOff = 0.1;
           pdf.line(cmOff, cmOff, cmOff + cmLen, cmOff); pdf.line(cmOff, cmOff, cmOff, cmOff + cmLen);
@@ -220,16 +232,16 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
         if (showColorBars) {
           const cbY = 0.15, cbW = 0.15, cbH = 0.08;
           const cbX = (pageW - 6 * cbW) / 2;
-          pdf.setFillColor(0, 255, 255); pdf.rect(cbX, cbY, cbW, cbH, "F");
-          pdf.setFillColor(255, 0, 255); pdf.rect(cbX + cbW, cbY, cbW, cbH, "F");
-          pdf.setFillColor(255, 255, 0); pdf.rect(cbX + 2*cbW, cbY, cbW, cbH, "F");
-          pdf.setFillColor(0, 0, 0); pdf.rect(cbX + 3*cbW, cbY, cbW, cbH, "F");
-          pdf.setFillColor(CMYK_GRAY[0], CMYK_GRAY[1], CMYK_GRAY[2]); pdf.rect(cbX + 4*cbW, cbY, cbW, cbH, "F");
-          pdf.setFillColor(CMYK_LIGHT_GRAY[0], CMYK_LIGHT_GRAY[1], CMYK_LIGHT_GRAY[2]); pdf.rect(cbX + 5*cbW, cbY, cbW, cbH, "F");
+          pdf.setFillColor(CMYK_CYAN_T[0], CMYK_CYAN_T[1], CMYK_CYAN_T[2], CMYK_CYAN_T[3]); pdf.rect(cbX, cbY, cbW, cbH, "F");
+          pdf.setFillColor(CMYK_MAGENTA_T[0], CMYK_MAGENTA_T[1], CMYK_MAGENTA_T[2], CMYK_MAGENTA_T[3]); pdf.rect(cbX + cbW, cbY, cbW, cbH, "F");
+          pdf.setFillColor(CMYK_YELLOW_T[0], CMYK_YELLOW_T[1], CMYK_YELLOW_T[2], CMYK_YELLOW_T[3]); pdf.rect(cbX + 2*cbW, cbY, cbW, cbH, "F");
+          pdf.setFillColor(CMYK_BLACK_T[0], CMYK_BLACK_T[1], CMYK_BLACK_T[2], CMYK_BLACK_T[3]); pdf.rect(cbX + 3*cbW, cbY, cbW, cbH, "F");
+          pdf.setFillColor(CMYK_GRAY_T[0], CMYK_GRAY_T[1], CMYK_GRAY_T[2], CMYK_GRAY_T[3]); pdf.rect(cbX + 4*cbW, cbY, cbW, cbH, "F");
+          pdf.setFillColor(CMYK_LGRAY_T[0], CMYK_LGRAY_T[1], CMYK_LGRAY_T[2], CMYK_LGRAY_T[3]); pdf.rect(cbX + 5*cbW, cbY, cbW, cbH, "F");
         }
 
         // Header — pure black text (C0 M0 Y0 K100)
-        pdf.setTextColor(CMYK_BLACK[0], CMYK_BLACK[1], CMYK_BLACK[2]);
+        pdf.setTextColor(CMYK_BLACK_T[0], CMYK_BLACK_T[1], CMYK_BLACK_T[2], CMYK_BLACK_T[3]);
         pdf.setFontSize(9); setPDFFont("bold");
         pdf.text("साहू समाज परिचायिका 2026 — युवक-युवती वैवाहिक परिचय", safe, safe + 0.15);
         pdf.setFontSize(6); setPDFFont("normal");
@@ -238,7 +250,7 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
         pdf.text(`पृष्ठ ${pageIdx + 1} / ${totalMatrimonyPages}`, pageW - safe, safe + 0.15, { align: "right" });
         pdf.setFontSize(5); setPDFFont("normal");
         pdf.text("300 DPI • CMYK C0 M0 Y0 K100", pageW - safe, safe + 0.22, { align: "right" });
-        pdf.setDrawColor(CMYK_BLACK[0], CMYK_BLACK[1], CMYK_BLACK[2]); pdf.setLineWidth(0.01);
+        pdf.setDrawColor(CMYK_BLACK_T[0], CMYK_BLACK_T[1], CMYK_BLACK_T[2], CMYK_BLACK_T[3]); pdf.setLineWidth(0.01);
         pdf.line(safe, safe + 0.28, pageW - safe, safe + 0.28);
 
         const gridTop = safe + 0.35;
@@ -257,17 +269,17 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
           const pad = 0.06;
 
           // Card
-          pdf.setFillColor(CMYK_OFF_WHITE[0], CMYK_OFF_WHITE[1], CMYK_OFF_WHITE[2]);
-          pdf.setDrawColor(CMYK_BLACK[0], CMYK_BLACK[1], CMYK_BLACK[2]);
+          pdf.setFillColor(CMYK_OFFWHITE_T[0], CMYK_OFFWHITE_T[1], CMYK_OFFWHITE_T[2], CMYK_OFFWHITE_T[3]);
+          pdf.setDrawColor(CMYK_BLACK_T[0], CMYK_BLACK_T[1], CMYK_BLACK_T[2], CMYK_BLACK_T[3]);
           pdf.setLineWidth(0.008);
           pdf.roundedRect(x + pad, y + pad, cellW - 2*pad, cellH - 2*pad, 0.03, 0.03, "FD");
 
           // Ad number + name (red)
           const headerY = y + pad + 0.12;
-          pdf.setTextColor(CMYK_RED[0], CMYK_RED[1], CMYK_RED[2]);
+          pdf.setTextColor(CMYK_RED_T[0], CMYK_RED_T[1], CMYK_RED_T[2], CMYK_RED_T[3]);
           pdf.setFontSize(7); setPDFFont("bold");
           pdf.text(`${item.ad_number}. ${m.name}`, x + pad + 0.04, headerY);
-          pdf.setDrawColor(CMYK_RED[0], CMYK_RED[1], CMYK_RED[2]); pdf.setLineWidth(0.005);
+          pdf.setDrawColor(CMYK_RED_T[0], CMYK_RED_T[1], CMYK_RED_T[2], CMYK_RED_T[3]); pdf.setLineWidth(0.005);
           pdf.line(x + pad + 0.02, headerY + 0.02, x + cellW - pad - 0.02, headerY + 0.02);
 
           // Text — pure black (C0 M0 Y0 K100)
@@ -278,7 +290,7 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
           const col2X = x + pad + cellW/2 - pad;
           const lineH = 0.075;
 
-          pdf.setTextColor(CMYK_BLACK[0], CMYK_BLACK[1], CMYK_BLACK[2]);
+          pdf.setTextColor(CMYK_BLACK_T[0], CMYK_BLACK_T[1], CMYK_BLACK_T[2], CMYK_BLACK_T[3]);
           pdf.setFontSize(5.5);
 
           // Row 1: जन्म + ऊँचाई
@@ -337,37 +349,44 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
                 reader.readAsDataURL(imgBlob);
               });
               const isPng = m.photo_url.toLowerCase().includes(".png") || imgBase64.startsWith("data:image/png");
-              pdf.setDrawColor(CMYK_BLACK[0], CMYK_BLACK[1], CMYK_BLACK[2]); pdf.setLineWidth(0.005);
+              pdf.setDrawColor(CMYK_BLACK_T[0], CMYK_BLACK_T[1], CMYK_BLACK_T[2], CMYK_BLACK_T[3]); pdf.setLineWidth(0.005);
               pdf.rect(imgX, imgY, imgW, imgH, "S");
-              pdf.addImage(imgBase64, isPng ? "PNG" : "JPEG", imgX, imgY, imgW, imgH, undefined, "FAST");
+              // FIX: Embed photo — jsPDF addImage 9th arg is rotation (number), not boolean
+              // For CMYK color space tagging, we pass it via the options object form instead
+              pdf.addImage({
+                imageData: imgBase64,
+                format: isPng ? "PNG" : "JPEG",
+                x: imgX, y: imgY, w: imgW, h: imgH,
+                compression: "FAST"
+              });
             } catch {
-              pdf.setFillColor(CMYK_LIGHT_GRAY[0], CMYK_LIGHT_GRAY[1], CMYK_LIGHT_GRAY[2]);
+              pdf.setFillColor(CMYK_LGRAY_T[0], CMYK_LGRAY_T[1], CMYK_LGRAY_T[2], CMYK_LGRAY_T[3]);
               pdf.rect(imgX, imgY, imgW, imgH, "F");
-              pdf.setFontSize(4); setPDFFont("normal"); pdf.setTextColor(CMYK_GRAY[0], CMYK_GRAY[1], CMYK_GRAY[2]);
+              pdf.setFontSize(4); setPDFFont("normal"); pdf.setTextColor(CMYK_GRAY_T[0], CMYK_GRAY_T[1], CMYK_GRAY_T[2], CMYK_GRAY_T[3]);
               pdf.text("फोटो", imgX + imgW/2, imgY + imgH/2, { align: "center" });
             }
           } else {
-            pdf.setFillColor(CMYK_LIGHT_GRAY[0], CMYK_LIGHT_GRAY[1], CMYK_LIGHT_GRAY[2]);
+            pdf.setFillColor(CMYK_LGRAY_T[0], CMYK_LGRAY_T[1], CMYK_LGRAY_T[2], CMYK_LGRAY_T[3]);
             pdf.rect(imgX, imgY, imgW, imgH, "F");
-            pdf.setFontSize(4); setPDFFont("normal"); pdf.setTextColor(CMYK_GRAY[0], CMYK_GRAY[1], CMYK_GRAY[2]);
+            pdf.setFontSize(4); setPDFFont("normal"); pdf.setTextColor(CMYK_GRAY_T[0], CMYK_GRAY_T[1], CMYK_GRAY_T[2], CMYK_GRAY_T[3]);
             pdf.text("पासपोर्ट फोटो", imgX + imgW/2, imgY + imgH/2, { align: "center" });
           }
 
           // Contact
           const contactY = y + cellH - pad - 0.06;
-          pdf.setDrawColor(CMYK_GRAY[0], CMYK_GRAY[1], CMYK_GRAY[2]); pdf.setLineWidth(0.003);
+          pdf.setDrawColor(CMYK_GRAY_T[0], CMYK_GRAY_T[1], CMYK_GRAY_T[2], CMYK_GRAY_T[3]); pdf.setLineWidth(0.003);
           pdf.line(x + pad + 0.02, contactY - 0.03, x + cellW - pad - 0.02, contactY - 0.03);
-          pdf.setFontSize(5); setPDFFont("bold"); pdf.setTextColor(CMYK_BLACK[0], CMYK_BLACK[1], CMYK_BLACK[2]);
+          pdf.setFontSize(5); setPDFFont("bold"); pdf.setTextColor(CMYK_BLACK_T[0], CMYK_BLACK_T[1], CMYK_BLACK_T[2], CMYK_BLACK_T[3]);
           pdf.text(`फोन: ${m.mobile1 || "XXXXXXXXXX"}`, x + pad + 0.04, contactY);
           if (m.whatsapp) {
-            pdf.setTextColor(CMYK_GREEN[0], CMYK_GREEN[1], CMYK_GREEN[2]);
+            pdf.setTextColor(CMYK_GREEN_T[0], CMYK_GREEN_T[1], CMYK_GREEN_T[2], CMYK_GREEN_T[3]);
             pdf.text(`व्हाट्सएप: ${m.whatsapp}`, x + cellW - pad - 0.04, contactY, { align: "right" });
           }
         }
 
         // Footer
-        pdf.setTextColor(CMYK_BLACK[0], CMYK_BLACK[1], CMYK_BLACK[2]); pdf.setFontSize(5); setPDFFont("bold");
-        pdf.setDrawColor(CMYK_BLACK[0], CMYK_BLACK[1], CMYK_BLACK[2]); pdf.setLineWidth(0.005);
+        pdf.setTextColor(CMYK_BLACK_T[0], CMYK_BLACK_T[1], CMYK_BLACK_T[2], CMYK_BLACK_T[3]); pdf.setFontSize(5); setPDFFont("bold");
+        pdf.setDrawColor(CMYK_BLACK_T[0], CMYK_BLACK_T[1], CMYK_BLACK_T[2], CMYK_BLACK_T[3]); pdf.setLineWidth(0.005);
         pdf.line(safe, pageH - safe - 0.15, pageW - safe, pageH - safe - 0.15);
         pdf.text("प्रकाशक: इंडियन प्रेस, रायपुर (छ.ग.) • मुद्रण: परिचायिका 2026", safe, pageH - safe - 0.08);
         pdf.text("CorelDRAW संगत • C0 M0 Y0 K100 • Unicode Devanagari", pageW - safe, pageH - safe - 0.08, { align: "right" });
@@ -378,19 +397,19 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
         setPdfProgress(`व्यवसाय विज्ञापन पृष्ठ बन रहा है...`);
         await new Promise(r => setTimeout(r, 30));
         pdf.addPage([pageW, pageH], "portrait");
-        pdf.setFillColor(CMYK_WHITE[0], CMYK_WHITE[1], CMYK_WHITE[2]); pdf.rect(0, 0, pageW, pageH, "F");
-        pdf.setTextColor(CMYK_BLACK[0], CMYK_BLACK[1], CMYK_BLACK[2]); pdf.setFontSize(9); setPDFFont("bold");
+        pdf.setFillColor(CMYK_WHITE_T[0], CMYK_WHITE_T[1], CMYK_WHITE_T[2], CMYK_WHITE_T[3]); pdf.rect(0, 0, pageW, pageH, "F");
+        pdf.setTextColor(CMYK_BLACK_T[0], CMYK_BLACK_T[1], CMYK_BLACK_T[2], CMYK_BLACK_T[3]); pdf.setFontSize(9); setPDFFont("bold");
         pdf.text("साहू समाज परिचायिका 2026 — व्यावसायिक विज्ञापन", safe, safe + 0.15);
         pdf.setFontSize(6); setPDFFont("normal");
         pdf.text("CorelDRAW Editable • CMYK C0 M0 Y0 K100 • 300 DPI • Unicode", safe, safe + 0.22);
-        pdf.setDrawColor(CMYK_BLACK[0], CMYK_BLACK[1], CMYK_BLACK[2]); pdf.setLineWidth(0.01);
+        pdf.setDrawColor(CMYK_BLACK_T[0], CMYK_BLACK_T[1], CMYK_BLACK_T[2], CMYK_BLACK_T[3]); pdf.setLineWidth(0.01);
         pdf.line(safe, safe + 0.28, pageW - safe, safe + 0.28);
 
         let bizY = safe + 0.4;
         for (const ad of businessAds) {
-          pdf.setDrawColor(CMYK_BLACK[0], CMYK_BLACK[1], CMYK_BLACK[2]); pdf.setLineWidth(0.008);
-          pdf.setFillColor(CMYK_WHITE[0], CMYK_WHITE[1], CMYK_WHITE[2]); pdf.rect(safe, bizY, contentW, 2.0, "S");
-          pdf.setFontSize(8); setPDFFont("bold"); pdf.setTextColor(CMYK_BLACK[0], CMYK_BLACK[1], CMYK_BLACK[2]);
+          pdf.setDrawColor(CMYK_BLACK_T[0], CMYK_BLACK_T[1], CMYK_BLACK_T[2], CMYK_BLACK_T[3]); pdf.setLineWidth(0.008);
+          pdf.setFillColor(CMYK_WHITE_T[0], CMYK_WHITE_T[1], CMYK_WHITE_T[2], CMYK_WHITE_T[3]); pdf.rect(safe, bizY, contentW, 2.0, "S");
+          pdf.setFontSize(8); setPDFFont("bold"); pdf.setTextColor(CMYK_BLACK_T[0], CMYK_BLACK_T[1], CMYK_BLACK_T[2], CMYK_BLACK_T[3]);
           pdf.text(`विज्ञापन क्र.: ${ad.ad_number}`, safe + 0.05, bizY + 0.15);
           pdf.setFontSize(5); setPDFFont("normal");
           pdf.text(`जिला: ${ad.district_hi || "-"} • संगठन: ${ad.sangathan_hi || "-"}`, safe + 0.05, bizY + 0.25);
@@ -406,7 +425,12 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
                 reader.onerror = reject;
                 reader.readAsDataURL(imgBlob);
               });
-              pdf.addImage(imgBase64, ad.uploaded_jpg_url.toLowerCase().includes(".png") ? "PNG" : "JPEG", safe + 0.05, bizY + 0.45, contentW - 0.1, 1.4, undefined, "FAST");
+              pdf.addImage({
+                imageData: imgBase64,
+                format: ad.uploaded_jpg_url.toLowerCase().includes(".png") ? "PNG" : "JPEG",
+                x: safe + 0.05, y: bizY + 0.45, w: contentW - 0.1, h: 1.4,
+                compression: "FAST"
+              });
             } catch {}
           }
           bizY += 2.2;
