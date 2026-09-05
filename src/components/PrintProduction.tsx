@@ -28,6 +28,8 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
   const [selectedEdition, setSelectedEdition] = useState("");
   const [paymentFilter, setPaymentFilter] = useState<"ALL" | "PAID_ONLY" | "SUBMITTED_ONLY">("ALL");
   const [typeFilter, setTypeFilter] = useState<"ALL" | "matrimony" | "business">("ALL");
+  // FIX: Add toggle to show already-printed (Completed) ads so client can see what's been used
+  const [showPrinted, setShowPrinted] = useState(false);
 
   // Print Setup Options with Custom Page Dimensions
   const [pageSize, setPageSize] = useState<"letter" | "a4" | "magazine_trim" | "half_sheet" | "quarter_sheet" | "custom">("letter");
@@ -58,8 +60,14 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
     if (selectedDistrict && ad.district_hi !== selectedDistrict) return false;
     if (selectedSangathan && ad.sangathan_hi !== selectedSangathan) return false;
     if (selectedEdition && ad.edition_hi !== selectedEdition) return false;
+    // FIX: Hide already-printed (Completed) ads by default — prevents duplicate printing.
+    // Toggle via showPrinted checkbox below the filter bar.
+    if (!showPrinted && ad.production_status === "Completed") return false;
     return true;
   });
+
+  // Count of printed ads (for UI display)
+  const printedCount = advertisements.filter((ad) => ad.production_status === "Completed").length;
 
   const matrimonyAds = eligibleAds.filter((ad) => ad.type_code === "matrimony");
   const businessAds = eligibleAds.filter((ad) => ad.type_code === "business");
@@ -590,6 +598,22 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
             </p>
           </div>
         </div>
+
+        {/* FIX: Show already-printed (Completed) ads toggle — client spec: "जो add लिया जा चुका हो print के लिए यानी used हो चुका वो भी दिखे ताकि दुबारा same add न लिया जाए" */}
+        <label className="flex items-center gap-2 text-xs font-bold text-stone-700 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={showPrinted}
+            onChange={(e) => setShowPrinted(e.target.checked)}
+            className="w-4 h-4 accent-orange-600 cursor-pointer"
+          />
+          <span>पहले से प्रिंट हुए विज्ञापन भी दिखाएँ</span>
+          {printedCount > 0 && (
+            <span className="bg-stone-100 text-stone-600 px-1.5 py-0.5 rounded text-[10px] font-bold">
+              ({printedCount} प्रिंटेड)
+            </span>
+          )}
+        </label>
 
         <div className="flex items-center gap-3 text-xs text-stone-700 font-bold">
           <span>विवाह: <b className="text-orange-700">{matrimonyAds.length}</b></span>

@@ -1458,7 +1458,7 @@ export default function AdminPanel() {
           { label: "विवाह विज्ञापन (Matrimony)", val: advertisements.filter(a => a.type_code === "matrimony").length, desc: "सक्रिय विवाह बायोडाटा" },
           { label: "व्यवसाय विज्ञापन (Business)", val: advertisements.filter(a => a.type_code === "business").length, desc: "सक्रिय व्यापार विज्ञापन" },
           { label: "लंबित सत्यापन (Submitted)", val: orders.filter(o => o.payment_status === "SUBMITTED").length, desc: "एडमिन अनुमोदन योग्य" },
-          { label: "कुल एकत्र राशि", val: `₹${orders.filter(o => o.payment_status === "PAID").reduce((acc, curr) => acc + curr.total_amount, 0).toLocaleString("en-IN")}`, desc: "PAID भुगतान योग" }
+          { label: "कुल एकत्र राशि", val: `₹${orders.filter(o => o.payment_status === "PAID").reduce((acc, curr) => acc + Number(curr.total_amount || 0), 0).toLocaleString("en-IN")}/-`, desc: "PAID भुगतान योग" }
         ].map((stat, i) => (
           <div key={i} className="bg-white border border-stone-200 rounded-xl p-4 shadow-sm">
             <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">{stat.label}</span>
@@ -1601,15 +1601,26 @@ export default function AdminPanel() {
                                 {it.ad_number}
                               </span>
                             </span>
+                            {/* FIX: Show full ad details (district, sangathan, magazine, edition, size) per client request */}
+                            <span className="text-[10px] text-stone-500 pl-2.5 font-semibold">
+                              {it.district_hi || "-"} • {it.sangathan_hi || "-"}
+                            </span>
                             <span className="text-[10px] text-stone-400 pl-2.5">
-                              {it.district_hi} • {it.sangathan_hi} • {it.size_hi}
+                              {it.magazine_hi || "-"} • {it.edition_hi || "-"}
+                            </span>
+                            <span className="text-[10px] text-stone-400 pl-2.5">
+                              आकार: {it.size_hi || "-"}
+                            </span>
+                            <span className="text-[10px] font-bold text-stone-700 pl-2.5">
+                              दर: ₹{Number(it.price || 0).toLocaleString("en-IN")}/-
                             </span>
                           </div>
                         ))}
                       </div>
                     </td>
+                    {/* FIX: Money format — coerce total_amount to Number, show ₹X/- (no .00 suffix) */}
                     <td className="px-6 py-4 font-mono font-bold text-stone-950">
-                      ₹{ord.total_amount.toLocaleString("en-IN")}.00
+                      ₹{Number(ord.total_amount || 0).toLocaleString("en-IN")}/-
                     </td>
                     <td className="px-6 py-4">
                       {ord.payment_status === "PAID" && (
