@@ -186,39 +186,32 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
       // =============================================
       // CRITICAL FIX: Load Devanagari Unicode font for jsPDF
       // jsPDF's built-in 'helvetica' does NOT support Devanagari (Hindi) characters.
-      // Without embedding a Devanagari font, all Hindi text shows as empty/garbage
-      // in the generated PDF. We fetch Tiro Devanagari Hindi TTF from Google Fonts
-      // and register it in jsPDF's Virtual File System (VFS) so it gets embedded
-      // into the PDF. CorelDRAW will then see proper editable Unicode Devanagari text.
+      // Google Fonts serves WOFF2 to browsers, but jsPDF needs TTF format.
+      // So we bundle the TTF file in /public/fonts/ and fetch it from there.
       // =============================================
-      const fontUrl = "https://fonts.gstatic.com/s/tirodevanagarihindi/v11/x4dwsRJejrBVHtPgc1zZcFONvitFtsNsMow." + Math.random() + ".ttf";
-      // Alternative: fetch from Google Fonts API CSS and extract the woff2/ttf URL
-      // For maximum compatibility, use a direct TTF URL
       let fontBase64 = "";
       try {
-        setPdfProgress("Devanagari Unicode Font डाउनलोड हो रहा है...");
-        // Fetch Tiro Devanagari Hindi from Google Fonts
-        const cssResp = await fetch("https://fonts.googleapis.com/css2?family=Tiro+Devanagari+Hindi:ital@0&display=swap");
-        const cssText = await cssResp.text();
-        // Extract font file URL from CSS @font-face
-        const fontUrlMatch = cssText.match(/url\((https:\/\/[^)]+)\)/);
-        if (fontUrlMatch) {
-          const fontResp = await fetch(fontUrlMatch[1]);
+        setPdfProgress("Devanagari Unicode Font लोड हो रहा है...");
+        // Fetch TTF from our own server (same-origin, no CORS issues)
+        const fontResp = await fetch("/fonts/TiroDevanagariHindi.ttf");
+        if (fontResp.ok) {
           const fontBlob = await fontResp.blob();
           fontBase64 = await new Promise<string>((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = () => {
               const result = reader.result as string;
-              // Strip "data:font/woff2;base64," prefix — jsPDF needs raw base64
               const base64 = result.split(",")[1];
               resolve(base64);
             };
             reader.onerror = reject;
             reader.readAsDataURL(fontBlob);
           });
+          console.log("[PDF] Devanagari font loaded:", fontBlob.size, "bytes");
+        } else {
+          console.warn("[PDF] Font fetch failed:", fontResp.status);
         }
       } catch (fontErr) {
-        console.warn("Devanagari font fetch failed, falling back to helvetica:", fontErr);
+        console.warn("[PDF] Devanagari font load failed:", fontErr);
       }
 
       // FIX: Use jsPDF native vector API — all text, lines, and images are
