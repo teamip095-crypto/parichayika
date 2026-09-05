@@ -1,15 +1,23 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
-  "buildCommand": "vite build && esbuild server/index.ts --bundle --platform=node --format=cjs --external:vite --external:sql.js --external:pg-native --external:bufferutil --external:utf-8-validate --sourcemap --outfile=dist/server.cjs",
+  "buildCommand": "vite build && esbuild server/index.ts --bundle --platform=node --format=cjs --external:vite --external:sql.js --external:pg-native --external:bufferutil --external:utf-8-validate --external:sharp --sourcemap --outfile=dist/server.cjs",
   "outputDirectory": "dist",
   "functions": {
     "api/index.ts": {
       "maxDuration": 30,
       "memory": 512
+    },
+    "api/cmyk-convert.ts": {
+      "maxDuration": 30,
+      "memory": 1024
     }
   },
   "rewrites": [
+    {
+      "source": "/api/cmyk-convert",
+      "destination": "/api/cmyk-convert"
+    },
     {
       "source": "/api/(.*)",
       "destination": "/api"

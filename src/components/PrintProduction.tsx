@@ -340,25 +340,59 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
 
           if (m.photo_url && m.photo_url.startsWith("http")) {
             try {
-              const imgResp = await fetch(m.photo_url);
-              const imgBlob = await imgResp.blob();
-              const imgBase64 = await new Promise<string>((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result as string);
-                reader.onerror = reject;
-                reader.readAsDataURL(imgBlob);
+              // =============================================
+              // FIX: Server-side CMYK conversion via /api/cmyk-convert
+              // The serverless function uses sharp/libvips to convert RGB→CMYK.
+              // Returns a true CMYK JPEG (space='cmyk', channels=4).
+              // jsPDF then embeds this with colorSpace: 'DeviceCMYK'.
+              // =============================================
+              const cmykResp = await fetch("/api/cmyk-convert", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ imageUrl: m.photo_url })
               });
-              const isPng = m.photo_url.toLowerCase().includes(".png") || imgBase64.startsWith("data:image/png");
-              pdf.setDrawColor(CMYK_BLACK_T[0], CMYK_BLACK_T[1], CMYK_BLACK_T[2], CMYK_BLACK_T[3]); pdf.setLineWidth(0.005);
+
+              let imgDataForPdf: string;
+              let imgFormat: string;
+
+              if (cmykResp.ok) {
+                const cmykData = await cmykResp.json();
+                if (cmykData.success && cmykData.cmykImage) {
+                  // Use the server-converted CMYK JPEG
+                  imgDataForPdf = cmykData.cmykImage;
+                  imgFormat = "JPEG";
+                  console.log("[PDF] CMYK photo converted:", cmykData.colorSpace, cmykData.channels, "channels");
+                } else {
+                  // Fallback: fetch original RGB if CMYK conversion fails
+                  const imgResp = await fetch(m.photo_url);
+                  const imgBlob = await imgResp.blob();
+                  imgDataForPdf = await new Promise<string>((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result as string);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(imgBlob);
+                  });
+                  imgFormat = m.photo_url.toLowerCase().includes(".png") ? "PNG" : "JPEG";
+                  console.warn("[PDF] CMYK conversion failed, using RGB fallback");
+                }
+              } else {
+                // Fallback: fetch original RGB
+                const imgResp = await fetch(m.photo_url);
+                const imgBlob = await imgResp.blob();
+                imgDataForPdf = await new Promise<string>((resolve, reject) => {
+                  const reader = new FileReader();
+                  reader.onload = () => resolve(reader.result as string);
+                  reader.onerror = reject;
+                  reader.readAsDataURL(imgBlob);
+                });
+                imgFormat = m.photo_url.toLowerCase().includes(".png") ? "PNG" : "JPEG";
+                console.warn("[PDF] CMYK endpoint unavailable, using RGB fallback");
+              }
+
+              pdf.setDrawColor(CMYK_BLACK_T[0], CMYK_BLACK_T[1], CMYK_BLACK_T[2], CMYK_BLACK_T[3]);
+              pdf.setLineWidth(0.005);
               pdf.rect(imgX, imgY, imgW, imgH, "S");
-              // FIX: Embed photo — jsPDF addImage 9th arg is rotation (number), not boolean
-              // For CMYK color space tagging, we pass it via the options object form instead
-              pdf.addImage({
-                imageData: imgBase64,
-                format: isPng ? "PNG" : "JPEG",
-                x: imgX, y: imgY, w: imgW, h: imgH,
-                compression: "FAST"
-              });
+              pdf.addImage(imgDataForPdf, imgFormat, imgX, imgY, imgW, imgH, undefined, "FAST");
             } catch {
               pdf.setFillColor(CMYK_LGRAY_T[0], CMYK_LGRAY_T[1], CMYK_LGRAY_T[2], CMYK_LGRAY_T[3]);
               pdf.rect(imgX, imgY, imgW, imgH, "F");
@@ -417,20 +451,45 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
           pdf.text(`ग्राहक: ${ad.customer_name || "-"} • मोबाइल: ${ad.customer_mobile1 || "-"}`, safe + 0.05, bizY + 0.39);
           if (ad.uploaded_jpg_url && ad.uploaded_jpg_url.startsWith("http")) {
             try {
-              const imgResp = await fetch(ad.uploaded_jpg_url);
-              const imgBlob = await imgResp.blob();
-              const imgBase64 = await new Promise<string>((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result as string);
-                reader.onerror = reject;
-                reader.readAsDataURL(imgBlob);
+              // CMYK conversion for business ad images too
+              const cmykResp = await fetch("/api/cmyk-convert", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ imageUrl: ad.uploaded_jpg_url })
               });
-              pdf.addImage({
-                imageData: imgBase64,
-                format: ad.uploaded_jpg_url.toLowerCase().includes(".png") ? "PNG" : "JPEG",
-                x: safe + 0.05, y: bizY + 0.45, w: contentW - 0.1, h: 1.4,
-                compression: "FAST"
-              });
+
+              let bizImgData: string;
+              let bizImgFormat: string;
+
+              if (cmykResp.ok) {
+                const cmykData = await cmykResp.json();
+                if (cmykData.success && cmykData.cmykImage) {
+                  bizImgData = cmykData.cmykImage;
+                  bizImgFormat = "JPEG";
+                } else {
+                  const imgResp = await fetch(ad.uploaded_jpg_url);
+                  const imgBlob = await imgResp.blob();
+                  bizImgData = await new Promise<string>((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result as string);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(imgBlob);
+                  });
+                  bizImgFormat = ad.uploaded_jpg_url.toLowerCase().includes(".png") ? "PNG" : "JPEG";
+                }
+              } else {
+                const imgResp = await fetch(ad.uploaded_jpg_url);
+                const imgBlob = await imgResp.blob();
+                bizImgData = await new Promise<string>((resolve, reject) => {
+                  const reader = new FileReader();
+                  reader.onload = () => resolve(reader.result as string);
+                  reader.onerror = reject;
+                  reader.readAsDataURL(imgBlob);
+                });
+                bizImgFormat = ad.uploaded_jpg_url.toLowerCase().includes(".png") ? "PNG" : "JPEG";
+              }
+
+              pdf.addImage(bizImgData, bizImgFormat, safe + 0.05, bizY + 0.45, contentW - 0.1, 1.4, undefined, "FAST");
             } catch {}
           }
           bizY += 2.2;
