@@ -340,7 +340,6 @@ export default function PrintProduction({ advertisements }: PrintProductionProps
       setPdfProgress("");
     } finally { setIsGeneratingPdf(false); }
   };
-};
   const handleDownloadCorelDrawPdf = async () => {
     if (eligibleAds.length === 0) {
       alert("डाउनलोड करने के लिए कोई विज्ञापन उपलब्ध नहीं है।");
